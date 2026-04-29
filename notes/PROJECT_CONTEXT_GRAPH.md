@@ -23,9 +23,10 @@
 20. Flipkart Ads Planner foundation
 21. Flipkart Ads Report Mapping
 22. Flipkart Run Comparison
+23. Flipkart Adjustment Ledger
 
 ## Latest Completed Phase
-Phase 22 - Flipkart Run Comparison
+Phase 23 - Flipkart Adjustment Ledger
 
 ### Added
 - `src/backup_google_sheet.py` added
@@ -138,14 +139,21 @@ Phase 22 - Flipkart Run Comparison
 - `src/marketplaces/flipkart/create_flipkart_adjustment_ledger.py` added
 - `src/marketplaces/flipkart/apply_flipkart_adjustments.py` added
 - `src/marketplaces/flipkart/verify_flipkart_adjustment_ledger.py` added
-- Upgrade 5 adjustment ledger scaffold is in place; live-sheet execution and verification are next
-- Latest Upgrade 5 validation: `py_compile passed`
+- Upgrade 5 adjustment ledger is complete and verified
+- Latest Upgrade 5 result: `FLIPKART_ADJUSTMENTS_LEDGER created`
+- Latest Upgrade 5 result: `ledger_rows=0`, `valid_adjustment_rows=0`
+- Latest Upgrade 5 result: `FLIPKART_ADJUSTED_PROFIT rows=492`, `LOOKER_FLIPKART_ADJUSTED_PROFIT rows=492`
+- Latest Upgrade 5 result: `fsns_with_adjustments=0`, `net_adjustment=0`
+- Latest Upgrade 5 verification result: `status=PASS`
 
 ## Next Phase
-Upgrade 5 - Flipkart Adjustment Ledger
+Upgrade 6 - Report Format Drift Monitor
 
 ## Current Focus
-Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built and verified, and Upgrade 5 adjustment ledger scripts are scaffolded and compile cleanly.
+Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, and the next user-directed slice is the report format drift monitor.
+- Upgrade 6 implementation files are now in place: `src/marketplaces/flipkart/create_flipkart_report_format_baseline.py`, `src/marketplaces/flipkart/check_flipkart_report_format_drift.py`, and `src/marketplaces/flipkart/verify_flipkart_report_format_monitor.py`
+- The remaining safe next step is a known-good baseline capture followed by recurring drift checks, not a full Flipkart pipeline rerun
+- Upgrade 6 monitor classification is now stable: helper and empty sheets are treated separately from data sheets, and the immediate baseline-vs-current check returns `critical_issue_count=0`
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -164,10 +172,11 @@ Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built a
 - Latest Upgrade 4 result: `run_status_distribution=No Change:14, New:8`, `comparison_status_distribution=No Major Change:123`
 - Latest Upgrade 4 verification: `status=PASS`, `blank_fsn_count=0`, `not_enough_history=0`
 - Latest Upgrade 4 tabs created/updated: `FLIPKART_RUN_COMPARISON`, `FLIPKART_FSN_RUN_COMPARISON`, `LOOKER_FLIPKART_RUN_COMPARISON`
-- Upgrade 5 scripts scaffolded: `create_flipkart_adjustment_ledger.py`, `apply_flipkart_adjustments.py`, `verify_flipkart_adjustment_ledger.py`
-- Upgrade 5 validation: `py_compile passed`
-- Next stage starting: live Google Sheet execution for `Upgrade 5 - Flipkart Adjustment Ledger`
-- Upgrade 5 rules: adjustment ledger only, manually editable, original profit unchanged, adjusted profit separate, no full pipeline, no overwrite of `FLIPKART_FSN_HISTORY`
+- Upgrade 5 result: `FLIPKART_ADJUSTMENTS_LEDGER created`
+- Upgrade 5 result: `ledger_rows=0`, `valid_adjustment_rows=0`, `FLIPKART_ADJUSTED_PROFIT rows=492`, `LOOKER_FLIPKART_ADJUSTED_PROFIT rows=492`
+- Upgrade 5 result: `fsns_with_adjustments=0`, `net_adjustment=0`, `verification status=PASS`
+- Next stage starting: `Upgrade 6 - Report Format Drift Monitor`
+- Upgrade 6 rules: detect Flipkart raw report structure drift only, warning/output tabs only, no full pipeline, no normalized parser changes, no core calculation changes
 - Current production features:
   - one-command PowerShell wrapper works
   - Python runner remains the underlying execution path
@@ -254,16 +263,15 @@ Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built a
 - Latest Stage 10 control fix: manual-tab preservation check now matches the live tracker tab shape and returns `true`
 
 ### Next Task
-- Keep the default Stage 10 runner on refresh steps plus lightweight system health only
-- Keep detailed verifiers behind `--verify-all`
-- Keep Stage 10 isolated from the full wrapper and all live API calls
-- Keep normalized parsers unchanged
-- Keep P&L calculations unchanged
+- Build `Upgrade 6 - Report Format Drift Monitor`
+- Detect raw report sheet-name, header-name, row-count, required-column, and layout drift before analysis
+- Keep output tabs warning-only and structure-only
+- Do not run the full Flipkart pipeline
+- Do not change core calculations
+- Do not change normalized parsers
 - Do not touch `MASTER_SKU`
 - Do not touch other marketplaces
-- Preserve manual tabs and manual columns in `FLIPKART_ACTION_TRACKER`, `FLIPKART_COST_MASTER`, `FLIPKART_PRODUCT_AD_PROFILE`, and `FLIPKART_ADS_PLANNER`
-- Keep FSN as the primary key
-- Do not change core analysis calculations
+- Keep the monitor isolated from business logic and profit recalculation
 
 ### Rules
 - `FSN` is the primary key, primary filter, and primary join key
@@ -380,7 +388,7 @@ Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built a
 - Upgrade 5: Flipkart Adjustment Ledger
 - Goal: create an adjustment ledger to handle delayed Flipkart deductions/additions without overwriting original run history
 - Scope: adjustment ledger only
-- The ledger must be manually editable
+- The ledger is manually editable
 - Original profit stays unchanged
 - Adjusted profit is calculated separately
 - Do not run the full Flipkart pipeline
@@ -389,8 +397,20 @@ Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built a
 - Do not touch `MASTER_SKU`
 - Do not touch other marketplaces
 - Do not wipe manual tabs
-- Do not rebuild completed phases
 - Keep adjustment outputs separate from analysis calculations
+
+- Upgrade 6: Report Format Drift Monitor
+- Goal: detect raw Flipkart report structure drift before analysis runs
+- Scope: warning/output tabs only
+- Monitor sheet names, header names, row counts, required columns, and layout drift
+- Do not run the full Flipkart pipeline
+- Do not change core calculations
+- Do not change normalized parsers
+- Do not touch `MASTER_SKU`
+- Do not touch other marketplaces
+- Do not write business recalculation outputs
+- Keep the monitor separate from business logic
+- Latest Upgrade 6 verification: `status=PASS`, `monitor_rows=36`, `issue_rows=0`, `critical_issue_count=0`, `empty_helper_ok_count=17`, `data_sheet_ok_count=16`
 
 ### V2 Guardrails
 - Keep Flipkart v1 untouched
@@ -406,6 +426,7 @@ Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built a
 - Build Upgrade 3 as a source-tab foundation only, not a recalculation layer
 - Build Upgrade 4 as a comparison layer only, not a recalculation layer
 - Build Upgrade 5 as an adjustment layer only, not a recalculation layer
+- Build Upgrade 6 as a drift-monitor layer only, not a recalculation layer
 
 ### Working Rules
 - `FSN` remains the primary key, primary filter, and primary join key

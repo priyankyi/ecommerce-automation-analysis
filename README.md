@@ -198,6 +198,18 @@ python -m src.marketplaces.flipkart.apply_flipkart_adjustments
 python -m src.marketplaces.flipkart.verify_flipkart_adjustment_ledger
 ```
 
+Flipkart report format drift monitor:
+```powershell
+python -m src.marketplaces.flipkart.create_flipkart_report_format_baseline
+python -m src.marketplaces.flipkart.check_flipkart_report_format_drift
+python -m src.marketplaces.flipkart.verify_flipkart_report_format_monitor
+```
+
+Report format monitor SOP:
+- Create or refresh the baseline only after a known-good raw report cycle.
+- Use the drift check for the normal recurring validation cycle.
+- Refresh the baseline again only when a report format change is intentional and the parser update has been confirmed.
+
 Looker Studio connection guide:
 1. Open Looker Studio
 2. Create blank report
