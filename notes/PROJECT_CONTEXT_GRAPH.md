@@ -125,10 +125,10 @@ Phase 21 - Flipkart Ads Report Mapping
 - Latest Stage 9 tabs created/updated: `FLIPKART_LISTING_PRESENCE`, `FLIPKART_MISSING_ACTIVE_LISTINGS`, `FLIPKART_LISTING_STATUS_ISSUES`, `FLIPKART_SKU_ANALYSIS`
 
 ## Next Phase
-E-commerce Control Tower v2 upgrades
+Upgrade 3 - Looker Studio Dashboard Foundation
 
 ## Current Focus
-Flipkart v1 is complete and production-safe. Start the v2 upgrade track with repo-safe infrastructure work only.
+Flipkart v1 is complete and production-safe. The v2 upgrade track is now on Looker Studio source-tab foundations only.
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -315,8 +315,23 @@ Flipkart v1 is complete and production-safe. Start the v2 upgrade track with rep
 - Do not touch `MASTER_SKU`
 - Do not touch other marketplaces
 - Do not upload credentials, token files, or `.venv`
-- Upgrade 2 status: `src/marketplaces/flipkart/sync_flipkart_run_archive_to_drive.py` and `src/marketplaces/flipkart/verify_flipkart_drive_archive_sync.py` added
-- Upgrade 2 status: live Drive sync verification is still pending; keep this as a separate archive command, not part of the pipeline
+- Upgrade 2 status: complete and committed
+- Upgrade 2 commit: `d47e3f1 - Add Google Drive archive sync for Flipkart runs`
+- Upgrade 2 latest synced run: `FLIPKART_20260429_181349`
+- Upgrade 2 verification: `PASS`
+- Upgrade 2 files_uploaded: `24`
+- Upgrade 2 drive archive URL: exists and key files were verified
+
+- Upgrade 3: Looker Studio Dashboard Foundation
+- Goal: create clean Looker Studio source tabs in Google Sheets so Looker Studio can connect without relying on messy operational tabs
+- Scope: `LOOKER_*` source tabs only
+- Do not run the full Flipkart pipeline
+- Do not change core calculations
+- Do not touch `MASTER_SKU`
+- Do not touch other marketplaces
+- Do not wipe manual tabs
+- Keep the source layer clean and Looker-friendly
+- Upgrade 3 status: `src/marketplaces/flipkart/create_looker_studio_sources.py` and `src/marketplaces/flipkart/verify_looker_studio_sources.py` added; live sheet run passed; verifier returned `PASS`
 
 ### V2 Guardrails
 - Keep Flipkart v1 untouched
@@ -329,6 +344,7 @@ Flipkart v1 is complete and production-safe. Start the v2 upgrade track with rep
 - Keep output audit-friendly and token-efficient
 - Build only one upgrade at a time
 - Build Upgrade 2 as a storage/archive sync only, not a recalculation layer
+- Build Upgrade 3 as a source-tab foundation only, not a recalculation layer
 
 ### Working Rules
 - `FSN` remains the primary key, primary filter, and primary join key
