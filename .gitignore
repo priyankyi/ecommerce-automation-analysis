@@ -20,6 +20,7 @@ data/*
 !data/logs/.gitkeep
 credentials/*
 !credentials/.gitkeep
+credentials/visual_search.env
 
 # Local data folders
 data/input/*

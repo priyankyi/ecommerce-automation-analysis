@@ -147,10 +147,13 @@ Phase 23 - Flipkart Adjustment Ledger
 - Latest Upgrade 5 verification result: `status=PASS`
 
 ## Next Phase
-Upgrade 9 - Google Keyword Planner API Interface
+Upgrade 10 - Flipkart-only Visual Competitor Intelligence
 
 ## Current Focus
 Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, and Upgrade 8 module-wise data confidence is complete and verified.
+- Upgrade 10 visual competitor intelligence code is now in place: `config/visual_search_template.env`, `src/integrations/visual_search/visual_search_config.py`, `src/integrations/visual_search/search_google_lens_flipkart_only.py`, `src/marketplaces/flipkart/create_flipkart_competitor_search_queue.py`, `src/marketplaces/flipkart/run_flipkart_visual_competitor_search.py`, `src/marketplaces/flipkart/create_flipkart_competitor_price_intelligence.py`, and `src/marketplaces/flipkart/verify_flipkart_competitor_intelligence.py`
+- Upgrade 10 stays optional, cached, Flipkart-only, and ad-ready FSN only; it does not touch `MASTER_SKU`, the full pipeline, core P&L calculations, prices, or ads decisions
+- Upgrade 10 local outputs now include `flipkart_competitor_search_queue.csv`, `flipkart_visual_competitor_results.csv`, `flipkart_competitor_price_intelligence.csv`, and `looker_flipkart_competitor_intelligence.csv`
 - Upgrade 6 implementation files are now in place: `src/marketplaces/flipkart/create_flipkart_report_format_baseline.py`, `src/marketplaces/flipkart/check_flipkart_report_format_drift.py`, and `src/marketplaces/flipkart/verify_flipkart_report_format_monitor.py`
 - The remaining safe next step is a known-good baseline capture followed by recurring drift checks, not a full Flipkart pipeline rerun
 - Upgrade 6 monitor classification is now stable: helper and empty sheets are treated separately from data sheets, and the immediate baseline-vs-current check returns `critical_issue_count=0`
@@ -161,9 +164,15 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Upgrade 8 result: `HIGH confidence=42`, `MEDIUM confidence=68`, `LOW confidence=13`
 - Upgrade 8 result: `primary data gaps=COGS Missing:63 | Format Issue:36 | Ads Mapping Weak:15 | Listing Missing:9`
 - Upgrade 8 verification result: `status=PASS`
-- Upgrade 9 next focus: Google Ads / Keyword Planner interface for monthly keyword demand refresh
-- Upgrade 9 scope: API-ready, cached, production-safe, optional credentials only, no full pipeline, no Flipkart API, no `MASTER_SKU`, no other marketplace edits
-- Upgrade 9 must refresh `GOOGLE_KEYWORD_METRICS_CACHE` monthly and then update `PRODUCT_TYPE_DEMAND_PROFILE`
+- Upgrade 9 result: Google Keyword Planner API interface built in fallback-safe mode
+- Upgrade 9 result: Google Ads Basic Access approval is pending
+- Upgrade 9 result: `keyword_seed_rows=26`, `keyword_cache_rows=26`, `cache_status_distribution=Pending 26`
+- Upgrade 9 result: `PRODUCT_TYPE_DEMAND_PROFILE rows=7`
+- Upgrade 9 verification result: `update_product_type_demand_profile status=SUCCESS_WITH_WARNINGS`
+- Upgrade 9 verification result: `verify_google_keyword_metrics_cache status=PASS_WITH_WARNINGS`, warning=`CACHE_EMPTY`
+- Upgrade 10 implementation is now in place; optional credentialed verification is next if needed
+- Upgrade 10 scope: optional and cached competitor lookup, Flipkart.com URLs only, no aggressive scraping, no `MASTER_SKU`, no other marketplaces, no core P&L changes, no auto price changes, no auto ads changes without clear output
+- Upgrade 10 must start with Scale Ads + Test Ads FSNs only
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -175,6 +184,10 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Flipkart API is not usable right now; Developer Access is pending and API tests returned HTTP 401
 - Do not depend on Flipkart API for Stage 8
 - Google Ads API should be kept in mind for future automation, but Stage 8 must work without Google Ads API credentials
+- Upgrade 9 is complete in fallback-safe mode; Google Ads Basic Access approval is still pending
+- Upgrade 9 latest verified counts: `keyword_seed_rows=26`, `keyword_cache_rows=26`, `cache_status_distribution=Pending 26`
+- Upgrade 9 latest verified profile rows: `PRODUCT_TYPE_DEMAND_PROFILE rows=7`
+- Upgrade 9 latest verification statuses: `update_product_type_demand_profile=SUCCESS_WITH_WARNINGS`, `verify_google_keyword_metrics_cache=PASS_WITH_WARNINGS`
 - Latest Stage 6 COGS result: `FLIPKART_COST_MASTER exists`, `FLIPKART_SKU_ANALYSIS now has COGS profit columns`
 - Latest Stage 6 COGS result: `rows read=123`, `rows written=123`, `missing_cost_rows=63`, `missing_cogs_rows=63`
 - Latest Stage 6 COGS result: `cogs_entered_fsns=60`, `cogs_missing_fsns=63`, `cogs_completion_percent=48.78`
@@ -273,15 +286,18 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Latest Stage 10 control fix: manual-tab preservation check now matches the live tracker tab shape and returns `true`
 
 ### Next Task
-- Build `Upgrade 6 - Report Format Drift Monitor`
-- Detect raw report sheet-name, header-name, row-count, required-column, and layout drift before analysis
-- Keep output tabs warning-only and structure-only
+- Upgrade 10 implementation is locally added; the next optional step is a credentialed local verification run if `credentials/visual_search.env` is supplied
+- Keep the competitor lookup optional and cached
+- Keep URLs Flipkart-only and skip other marketplaces
+- Start with Scale Ads + Test Ads FSNs only
 - Do not run the full Flipkart pipeline
-- Do not change core calculations
-- Do not change normalized parsers
+- Do not scrape Flipkart aggressively
 - Do not touch `MASTER_SKU`
 - Do not touch other marketplaces
-- Keep the monitor isolated from business logic and profit recalculation
+- Do not change core P&L calculations
+- Do not auto-change prices
+- Do not auto-change ads decisions without clear output
+- Keep the layer isolated from business logic and profit recalculation
 
 ### Rules
 - `FSN` is the primary key, primary filter, and primary join key

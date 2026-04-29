@@ -191,6 +191,23 @@ python -m src.marketplaces.flipkart.verify_google_keyword_metrics_cache
 7. If the test returns `API_ACCESS_NOT_READY`, confirm Basic Access and Keyword Planning permissible use in the Google Ads API center.
 8. Keep this monthly/on-demand only. Do not wire it into the full Flipkart wrapper or the dashboard refresh flow yet.
 
+Flipkart visual competitor intelligence:
+```powershell
+python -m src.marketplaces.flipkart.create_flipkart_competitor_search_queue
+python -m src.marketplaces.flipkart.run_flipkart_visual_competitor_search --max-fsns 5
+python -m src.marketplaces.flipkart.create_flipkart_competitor_price_intelligence
+python -m src.marketplaces.flipkart.verify_flipkart_competitor_intelligence
+```
+
+Noob-friendly SOP:
+1. Run the queue builder first.
+2. If `Product_Image_URL` is blank, fill it only when you have a safe local image URL.
+3. If you want visual search later, copy `config/visual_search_template.env` to `credentials/visual_search.env` and fill in the real key locally.
+4. Run visual search with `--max-fsns 5`.
+5. Run price intelligence after the visual results exist.
+6. Run the verifier.
+7. Do not auto-change prices or ads decisions; review `Suggested_Action` manually.
+
 Stage 9 listing presence workflow:
 ```powershell
 python -m src.marketplaces.flipkart.create_flipkart_listing_presence_workflow
