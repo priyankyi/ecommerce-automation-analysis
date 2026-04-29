@@ -1,0 +1,16 @@
+{
+  "default_marketplace": "Unknown",
+  "columns": {
+    "campaign_id": ["Campaign_ID", "Campaign ID", "campaign_id", "id"],
+    "campaign_name": ["Campaign_Name", "Campaign Name", "campaign_name", "name"],
+    "marketplace": ["Marketplace", "marketplace", "Channel", "Source"],
+    "sku_id": ["SKU_ID", "SKU", "seller_sku", "sku"],
+    "product_title": ["Product_Title", "Product Title", "title"],
+    "date": ["Date", "Ad_Date", "Report_Date", "date"],
+    "impressions": ["Impressions", "impressions"],
+    "clicks": ["Clicks", "clicks"],
+    "ad_spend": ["Ad_Spend", "Ad Spend", "Spend", "spend"],
+    "ad_sales": ["Ad_Sales", "Ad Sales", "Sales", "sales"],
+    "orders": ["Orders", "orders"]
+  }
+}

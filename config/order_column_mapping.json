@@ -1,0 +1,17 @@
+{
+  "default_marketplace": "Unknown",
+  "columns": {
+    "order_id": ["Order ID", "Order_ID", "order_id", "id"],
+    "marketplace": ["Marketplace", "marketplace", "Channel", "Source"],
+    "sku": ["SKU", "Raw_SKU", "SKU_ID", "sku", "seller_sku"],
+    "product_title": ["Product Title", "Raw_Product_Title", "Title", "product_title"],
+    "quantity": ["Qty", "Raw_Quantity", "Quantity", "quantity"],
+    "selling_price": ["Selling Price", "Raw_Selling_Price", "Price", "selling_price"],
+    "order_status": ["Order Status", "Raw_Order_Status", "Status", "order_status"],
+    "order_date": ["Order Date", "Raw_Order_Date", "date", "order_date"],
+    "dispatch_date": ["Dispatch Date", "Raw_Dispatch_Date", "dispatch_date"],
+    "delivered_date": ["Delivered Date", "Raw_Delivered_Date", "delivered_date"],
+    "return_status": ["Return Status", "Raw_Return_Status", "return_status"],
+    "cancellation_reason": ["Cancellation Reason", "Raw_Cancellation_Reason", "cancellation_reason"]
+  }
+}

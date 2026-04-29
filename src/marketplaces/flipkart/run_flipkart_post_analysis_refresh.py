@@ -1,0 +1,423 @@
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any, Dict, List, Sequence
+
+from src.marketplaces.flipkart.flipkart_utils import LOG_DIR, append_csv_log, ensure_directories, now_iso
+
+LOG_PATH = LOG_DIR / "flipkart_post_analysis_refresh_log.csv"
+
+LOG_HEADERS = [
+    "timestamp",
+    "status",
+    "step_name",
+    "details",
+    "log_path",
+]
+
+STEP_TAB_MAP: Dict[str, List[str]] = {
+    "update_flipkart_profit_after_cogs": ["FLIPKART_SKU_ANALYSIS"],
+    "create_flipkart_return_comments_analysis": ["FLIPKART_RETURN_COMMENTS", "FLIPKART_RETURN_ISSUE_SUMMARY", "FLIPKART_RETURN_REASON_PIVOT"],
+    "create_flipkart_ads_planner_foundation": ["FLIPKART_PRODUCT_AD_PROFILE", "GOOGLE_ADS_KEYWORD_SEEDS", "GOOGLE_KEYWORD_METRICS_CACHE", "PRODUCT_TYPE_DEMAND_PROFILE", "FLIPKART_ADS_PLANNER"],
+    "create_flipkart_ads_mapping": ["FLIPKART_ADS_MASTER", "FLIPKART_ADS_MAPPING_ISSUES", "FLIPKART_ADS_SUMMARY_BY_FSN", "FLIPKART_ADS_PLANNER"],
+    "update_flipkart_ads_recommendations": ["FLIPKART_ADS_PLANNER"],
+    "create_flipkart_listing_presence_workflow": ["FLIPKART_LISTING_PRESENCE", "FLIPKART_MISSING_ACTIVE_LISTINGS", "FLIPKART_LISTING_STATUS_ISSUES", "FLIPKART_SKU_ANALYSIS"],
+    "create_flipkart_alerts_and_tasks": ["FLIPKART_ALERTS_GENERATED", "FLIPKART_ACTION_TRACKER", "FLIPKART_ACTIVE_TASKS"],
+    "create_flipkart_dashboard": ["FLIPKART_DASHBOARD", "FLIPKART_DASHBOARD_DATA", "FLIPKART_TOP_ALERTS", "FLIPKART_TOP_RETURN_ISSUES", "FLIPKART_ACTION_SUMMARY"],
+    "create_flipkart_fsn_drilldown": ["FLIPKART_FSN_DRILLDOWN"],
+}
+
+STEP_MODULES: Dict[str, str] = {
+    "update_flipkart_profit_after_cogs": "src.marketplaces.flipkart.update_flipkart_profit_after_cogs",
+    "create_flipkart_return_comments_analysis": "src.marketplaces.flipkart.create_flipkart_return_comments_analysis",
+    "create_flipkart_ads_planner_foundation": "src.marketplaces.flipkart.create_flipkart_ads_planner_foundation",
+    "create_flipkart_ads_mapping": "src.marketplaces.flipkart.create_flipkart_ads_mapping",
+    "update_flipkart_ads_recommendations": "src.marketplaces.flipkart.update_flipkart_ads_recommendations",
+    "create_flipkart_listing_presence_workflow": "src.marketplaces.flipkart.create_flipkart_listing_presence_workflow",
+    "create_flipkart_alerts_and_tasks": "src.marketplaces.flipkart.create_flipkart_alerts_and_tasks",
+    "create_flipkart_dashboard": "src.marketplaces.flipkart.create_flipkart_dashboard",
+    "create_flipkart_fsn_drilldown": "src.marketplaces.flipkart.create_flipkart_fsn_drilldown",
+    "verify_flipkart_cogs_layer": "src.marketplaces.flipkart.verify_flipkart_cogs_layer",
+    "verify_flipkart_alerts_tasks": "src.marketplaces.flipkart.verify_flipkart_alerts_tasks",
+    "verify_flipkart_return_comments_analysis": "src.marketplaces.flipkart.verify_flipkart_return_comments_analysis",
+    "verify_flipkart_ads_planner_foundation": "src.marketplaces.flipkart.verify_flipkart_ads_planner_foundation",
+    "verify_flipkart_ads_mapping": "src.marketplaces.flipkart.verify_flipkart_ads_mapping",
+    "verify_flipkart_ads_recommendations": "src.marketplaces.flipkart.verify_flipkart_ads_recommendations",
+    "verify_flipkart_listing_presence_workflow": "src.marketplaces.flipkart.verify_flipkart_listing_presence_workflow",
+}
+HEALTH_CHECK_MODULE = "src.marketplaces.flipkart.verify_flipkart_system_health"
+
+STEP_ORDER: List[str] = [
+    "update_flipkart_profit_after_cogs",
+    "create_flipkart_return_comments_analysis",
+    "create_flipkart_ads_planner_foundation",
+    "create_flipkart_ads_mapping",
+    "update_flipkart_ads_recommendations",
+    "create_flipkart_listing_presence_workflow",
+    "create_flipkart_alerts_and_tasks",
+    "create_flipkart_dashboard",
+    "create_flipkart_fsn_drilldown",
+]
+
+HEALTH_CHECK_STEP = "verify_flipkart_system_health"
+DETAILED_VERIFY_STEPS: List[str] = [
+    "verify_flipkart_cogs_layer",
+    "verify_flipkart_alerts_tasks",
+    "verify_flipkart_return_comments_analysis",
+    "verify_flipkart_ads_planner_foundation",
+    "verify_flipkart_ads_mapping",
+    "verify_flipkart_ads_recommendations",
+    "verify_flipkart_listing_presence_workflow",
+]
+OPTIONAL_DETAILED_VERIFY_STEPS: List[str] = [
+    "verify_flipkart_return_issue_integration",
+]
+
+MANUAL_COLUMNS: Dict[str, Sequence[str]] = {
+    "FLIPKART_ACTION_TRACKER": (
+        "Owner",
+        "Status",
+        "Action_Taken",
+        "Action_Date",
+        "Expected_Impact",
+        "Review_After_Date",
+        "Review_After_Run_ID",
+        "Evidence_Link",
+        "Resolution_Notes",
+    ),
+    "FLIPKART_COST_MASTER": ("Cost_Price", "Packaging_Cost", "Other_Cost", "COGS_Status", "Remarks"),
+    "FLIPKART_PRODUCT_AD_PROFILE": ("Manual_Product_Type", "Manual_Seasonality_Tag", "Manual_Override_Remarks"),
+    "FLIPKART_ADS_PLANNER": ("Manual_Final_Ads_Decision", "Manual_Ads_Remarks"),
+    "FLIPKART_MISSING_ACTIVE_LISTINGS": ("Owner", "Status", "Remarks"),
+    "FLIPKART_LISTING_STATUS_ISSUES": ("Owner", "Status", "Remarks"),
+}
+
+
+def _json_text(payload: Dict[str, Any]) -> str:
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+def _append_log_row(payload: Dict[str, Any]) -> None:
+    append_csv_log(LOG_PATH, LOG_HEADERS, [payload])
+
+
+def _step_expected_status(step_name: str) -> Sequence[str]:
+    if step_name == HEALTH_CHECK_STEP or step_name.startswith("verify_"):
+        return ("PASS", "WARNING", "RETRY_LATER")
+    return ("SUCCESS",)
+
+
+def _is_google_sheets_429(message: str) -> bool:
+    normalized = message.lower()
+    return "429" in normalized and "google" in normalized and "sheet" in normalized
+
+
+def _verification_warning_payload(step_name: str, payload: Dict[str, Any]) -> Dict[str, Any] | None:
+    if step_name != HEALTH_CHECK_STEP and not step_name.startswith("verify_"):
+        return None
+    if str(payload.get("status", "")).upper() == "RETRY_LATER":
+        warning_payload = dict(payload)
+        warning_payload["status"] = "WARNING"
+        warning_payload["message"] = "wait 5 minutes and rerun health check"
+        warning_payload["warning_type"] = "quota_limited_verification"
+        return warning_payload
+    if str(payload.get("status", "")).upper() == "WARNING":
+        return payload
+    message = str(payload.get("message", ""))
+    error_type = str(payload.get("error_type", ""))
+    if _is_google_sheets_429(message) or (error_type == "HttpError" and "429" in message):
+        warning_payload = dict(payload)
+        warning_payload["status"] = "WARNING"
+        warning_payload["message"] = "wait 5 minutes and rerun health check"
+        warning_payload["warning_type"] = "quota_limited_verification"
+        return warning_payload
+    return None
+
+
+def _build_detailed_verify_steps() -> List[str]:
+    detailed_steps = list(DETAILED_VERIFY_STEPS)
+    for step_name in OPTIONAL_DETAILED_VERIFY_STEPS:
+        if step_name in STEP_MODULES:
+            detailed_steps.append(step_name)
+    return detailed_steps
+
+
+def _resolve_step_module_name(step_name: str) -> str:
+    if step_name == HEALTH_CHECK_STEP:
+        return HEALTH_CHECK_MODULE
+    module_name = STEP_MODULES.get(step_name)
+    if module_name is None:
+        raise ValueError(f"Unknown Flipkart step: {step_name}")
+    return module_name
+
+
+def _ordered_tabs(step_names: Sequence[str], step_payloads: Dict[str, Dict[str, Any]]) -> List[str]:
+    ordered: List[str] = []
+    for step_name in step_names:
+        tabs = step_payloads.get(step_name, {}).get("tabs_updated")
+        if tabs is None:
+            tabs = step_payloads.get(step_name, {}).get("dashboard_tabs_updated")
+        if not tabs:
+            tabs = STEP_TAB_MAP.get(step_name, [])
+        for tab_name in tabs:
+            if tab_name not in ordered:
+                ordered.append(tab_name)
+    return ordered
+
+
+def _get_sheet_headers_batch(spreadsheet_id: str, tab_names: Sequence[str]) -> Dict[str, List[str]]:
+    from src.auth_google import build_services
+
+    sheets_service, _, _ = build_services()
+    ranges = [f"{tab_name}!A1:ZZ" for tab_name in tab_names]
+    response = sheets_service.spreadsheets().values().batchGet(spreadsheetId=spreadsheet_id, ranges=ranges).execute()
+    headers_by_tab: Dict[str, List[str]] = {}
+    for value_range in response.get("valueRanges", []):
+        range_name = str(value_range.get("range", ""))
+        tab_name = range_name.split("!", 1)[0]
+        values = value_range.get("values", [])
+        headers_by_tab[tab_name] = [str(cell) for cell in values[0]] if values else []
+    return headers_by_tab
+
+
+def _run_step_subprocess(step_name: str) -> Dict[str, Any]:
+    module_name = _resolve_step_module_name(step_name)
+    repo_root = Path(__file__).resolve().parents[3]
+    with TemporaryDirectory(prefix=f"{step_name}_") as temp_dir:
+        temp_path = Path(temp_dir)
+        stdout_path = temp_path / "stdout.txt"
+        stderr_path = temp_path / "stderr.txt"
+        with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
+            completed = subprocess.run(
+                [sys.executable, "-m", module_name],
+                cwd=str(repo_root),
+                stdout=stdout_handle,
+                stderr=stderr_handle,
+                check=False,
+            )
+        stdout_text = stdout_path.read_text(encoding="utf-8") if stdout_path.exists() else ""
+        stderr_text = stderr_path.read_text(encoding="utf-8") if stderr_path.exists() else ""
+
+    payload: Dict[str, Any] = {}
+    if stdout_text.strip():
+        try:
+            payload = json.loads(stdout_text)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"{step_name} produced non-JSON output") from exc
+    if not payload:
+        payload = {"status": "ERROR", "message": "No JSON output produced"}
+
+    payload["__returncode"] = completed.returncode
+    payload["__stderr"] = stderr_text.strip()
+    warning_payload = _verification_warning_payload(step_name, payload)
+    if warning_payload is not None:
+        warning_payload["__returncode"] = 0
+        warning_payload["__stderr"] = stderr_text.strip()
+        return warning_payload
+    return payload
+
+
+def _check_manual_columns(spreadsheet_id: str, tab_name: str, required_columns: Sequence[str]) -> bool:
+    headers = _get_sheet_headers_batch(spreadsheet_id, [tab_name]).get(tab_name, [])
+    return bool(headers) and all(column in headers for column in required_columns)
+
+
+def _validate_manual_tabs_preserved(spreadsheet_id: str) -> bool:
+    headers_by_tab = _get_sheet_headers_batch(spreadsheet_id, list(MANUAL_COLUMNS))
+    for tab_name, required_columns in MANUAL_COLUMNS.items():
+        headers = headers_by_tab.get(tab_name, [])
+        if not headers or not all(column in headers for column in required_columns):
+            return False
+    return True
+
+
+def _load_spreadsheet_id() -> str:
+    meta_path = Path(__file__).resolve().parents[3] / "data" / "output" / "master_sku_sheet.json"
+    if not meta_path.exists():
+        raise FileNotFoundError(f"Missing required file: {meta_path}")
+    return json.loads(meta_path.read_text(encoding="utf-8"))["spreadsheet_id"]
+
+
+def run_flipkart_post_analysis_refresh(
+    *,
+    verify_all: bool = False,
+    skip_verification: bool = False,
+    sleep_seconds: float = 0.0,
+    health_delay_seconds: float = 0.0,
+) -> Dict[str, Any]:
+    ensure_directories()
+    spreadsheet_id = _load_spreadsheet_id()
+
+    detailed_verify_steps = _build_detailed_verify_steps()
+    step_names = list(STEP_ORDER)
+    if not skip_verification:
+        if health_delay_seconds > 0:
+            step_names.append("__health_delay__")
+        if verify_all:
+            step_names.extend(detailed_verify_steps)
+        step_names.append(HEALTH_CHECK_STEP)
+
+    step_payloads: Dict[str, Dict[str, Any]] = {}
+    steps_run: List[str] = []
+    failed_step: str | None = None
+    failure_exc: BaseException | None = None
+    health_payload: Dict[str, Any] | None = None
+
+    for index, step_name in enumerate(step_names):
+        if step_name == "__health_delay__":
+            time.sleep(health_delay_seconds)
+            continue
+        try:
+            payload = _run_step_subprocess(step_name)
+            step_payloads[step_name] = payload
+            steps_run.append(step_name)
+            status_value = str(payload.get("status", "")).upper()
+            returncode = int(payload.get("__returncode", 0) or 0)
+            if step_name == HEALTH_CHECK_STEP:
+                health_payload = payload
+                if status_value == "WARNING":
+                    failed_step = "quota_limited_verification"
+                    break
+                if status_value == "RETRY_LATER" or _is_google_sheets_429(str(payload.get("message", ""))):
+                    failed_step = "quota_limited_verification"
+                    break
+                if status_value != "PASS" or returncode != 0:
+                    failed_step = HEALTH_CHECK_STEP
+                    if status_value and status_value != "PASS":
+                        failure_exc = RuntimeError(payload.get("message", f"{step_name} failed"))
+                    elif returncode != 0:
+                        failure_exc = RuntimeError(payload.get("__stderr", f"{step_name} returned non-zero exit code"))
+                    break
+                continue
+            if status_value == "WARNING":
+                failed_step = "quota_limited_verification"
+                break
+            if status_value not in {value.upper() for value in _step_expected_status(step_name)} or returncode != 0:
+                failed_step = step_name
+                if status_value and status_value != "SUCCESS" and status_value != "PASS":
+                    failure_exc = RuntimeError(payload.get("message", f"{step_name} failed"))
+                elif returncode != 0:
+                    failure_exc = RuntimeError(payload.get("__stderr", f"{step_name} returned non-zero exit code"))
+                break
+        except BaseException as exc:  # noqa: BLE001 - capture step failure for JSON summary
+            failed_step = step_name
+            failure_exc = exc
+            break
+        if sleep_seconds > 0 and index < len(step_names) - 1:
+            time.sleep(sleep_seconds)
+
+    verification_steps: List[str] = []
+    if not skip_verification:
+        verification_steps.append(HEALTH_CHECK_STEP)
+    if verify_all:
+        verification_steps.extend(detailed_verify_steps)
+    verification_passed = bool(verification_steps) and all(
+        str(step_payloads.get(step, {}).get("status", "")).upper() == "PASS" for step in verification_steps
+    )
+    verification_warning = any(
+        str(step_payloads.get(step, {}).get("status", "")).upper() == "WARNING" for step in verification_steps
+    )
+    manual_tabs_preserved = _validate_manual_tabs_preserved(spreadsheet_id)
+    tabs_refreshed = _ordered_tabs(STEP_ORDER, step_payloads)
+
+    status = "SUCCESS"
+    error_type = ""
+    message = ""
+    if failure_exc is not None:
+        status = "ERROR"
+        if failed_step == HEALTH_CHECK_STEP and health_payload is not None:
+            error_type = str(health_payload.get("error_type", "")) or failure_exc.__class__.__name__
+            message = str(health_payload.get("message", "")) or str(failure_exc)
+        else:
+            error_type = failure_exc.__class__.__name__
+            message = str(failure_exc)
+    elif failed_step == "quota_limited_verification":
+        status = "WARNING"
+        verification_passed = False
+        message = "wait 5 minutes and rerun health check"
+    elif verification_warning:
+        status = "WARNING"
+        failed_step = "quota_limited_verification"
+        message = "wait 5 minutes and rerun health check"
+    elif not verification_passed or not manual_tabs_preserved:
+        status = "FAIL"
+        if not verification_passed and not failed_step:
+            failed_step = "verification_passed"
+        elif not manual_tabs_preserved and not failed_step:
+            failed_step = "manual_tabs_preserved"
+
+    summary = {
+        "timestamp": now_iso(),
+        "status": status,
+        "steps_run": steps_run,
+        "failed_step": failed_step,
+        "verification_passed": verification_passed,
+        "verification_skipped": skip_verification,
+        "tabs_refreshed": tabs_refreshed,
+        "manual_tabs_preserved": manual_tabs_preserved,
+        "log_path": str(LOG_PATH),
+    }
+    if error_type:
+        summary["error_type"] = error_type
+    if message:
+        summary["message"] = message
+    _append_log_row(
+        {
+            "timestamp": summary["timestamp"],
+            "status": summary["status"],
+            "step_name": "run_flipkart_post_analysis_refresh",
+            "details": json.dumps({k: v for k, v in summary.items() if k != "timestamp"}, ensure_ascii=False),
+            "log_path": str(LOG_PATH),
+        }
+    )
+    return summary
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run Flipkart post-analysis refresh steps.")
+    parser.add_argument("--verify-all", action="store_true", help="Run detailed Flipkart verification scripts after the default refresh flow.")
+    parser.add_argument("--skip-verification", action="store_true", help="Skip post-refresh verification and run refresh modules only.")
+    parser.add_argument("--sleep-seconds", type=float, default=0.0, help="Pause between subprocess steps to reduce Google Sheets quota pressure.")
+    parser.add_argument("--health-delay-seconds", type=float, default=0.0, help="Pause before the health check or detailed verification steps.")
+    args = parser.parse_args()
+
+    try:
+        summary = run_flipkart_post_analysis_refresh(
+            verify_all=args.verify_all,
+            skip_verification=args.skip_verification,
+            sleep_seconds=max(0.0, args.sleep_seconds),
+            health_delay_seconds=max(0.0, args.health_delay_seconds),
+        )
+        print(_json_text(summary))
+        if summary["status"] not in {"SUCCESS", "WARNING"}:
+            raise SystemExit(1)
+    except Exception as exc:
+        error_payload = {
+            "timestamp": now_iso(),
+            "status": "ERROR",
+            "error_type": exc.__class__.__name__,
+            "message": str(exc),
+            "failed_step": "run_flipkart_post_analysis_refresh",
+            "log_path": str(LOG_PATH),
+        }
+        _append_log_row(
+            {
+                "timestamp": error_payload["timestamp"],
+                "status": error_payload["status"],
+                "step_name": error_payload["failed_step"],
+                "details": json.dumps(error_payload, ensure_ascii=False),
+                "log_path": str(LOG_PATH),
+            }
+        )
+        print(_json_text(error_payload))
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

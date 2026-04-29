@@ -1,0 +1,45 @@
+{
+  "report_types": {
+    "master_fsn": {
+      "filename_keywords": ["master", "fsn", "sparkworld"],
+      "sheet_keywords": ["master", "fsn"],
+      "column_signals": ["fsn", "sku_id", "product_title", "priority", "remarks"]
+    },
+    "listing": {
+      "filename_keywords": ["listing"],
+      "sheet_keywords": ["listing", "catalog", "inventory"],
+      "column_signals": ["fsn", "seller_sku", "listing_status", "stock", "selling_price", "hsn", "tax_code"]
+    },
+    "orders": {
+      "filename_keywords": ["order"],
+      "sheet_keywords": ["order", "orders"],
+      "column_signals": ["fsn", "order_id", "order_item_id", "quantity", "selling_price", "order_status", "order_date"]
+    },
+    "returns": {
+      "filename_keywords": ["return"],
+      "sheet_keywords": ["return", "returns"],
+      "column_signals": ["order_id", "order_item_id", "return_id", "return_reason", "return_status"]
+    },
+    "settlements": {
+      "filename_keywords": ["settlement", "settled"],
+      "sheet_keywords": ["settlement", "settled"],
+      "column_signals": ["settlement_id", "order_id", "order_item_id", "gross_amount", "net_settlement", "commission"]
+    },
+    "pnl": {
+      "filename_keywords": ["pnl", "profit", "earnings"],
+      "sheet_keywords": ["pnl", "profit", "earnings"],
+      "column_signals": ["flipkart_net_earnings", "flipkart_margin", "flipkart_expenses", "amount_settled", "amount_pending"]
+    },
+    "sales_tax": {
+      "filename_keywords": ["sales", "tax", "gstr"],
+      "sheet_keywords": ["sales", "gstr", "tax"],
+      "column_signals": ["invoice_id", "invoice_date", "taxable_value", "igst", "cgst", "sgst", "tcs", "tds"]
+    },
+    "ads": {
+      "filename_keywords": ["ads", "ad", "campaign"],
+      "sheet_keywords": ["ads", "ad", "campaign"],
+      "column_signals": ["campaign_id", "campaign_name", "adgroup_id", "adgroup_name", "views", "clicks", "total_revenue", "roi"]
+    }
+  }
+}
+

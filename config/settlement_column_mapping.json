@@ -1,0 +1,18 @@
+{
+  "columns": {
+    "settlement_id": ["Settlement_ID", "Settlement ID", "settlement_id", "id"],
+    "order_id": ["Order_ID", "Order ID", "order_id"],
+    "marketplace": ["Marketplace", "marketplace", "Channel", "Source"],
+    "sku_id": ["SKU_ID", "SKU", "seller_sku", "sku"],
+    "settlement_date": ["Settlement_Date", "Settlement Date", "settlement_date"],
+    "gross_amount": ["Gross_Amount", "Gross Amount", "gross_amount"],
+    "marketplace_fee": ["Marketplace_Fee", "Marketplace Fee", "marketplace_fee"],
+    "shipping_fee": ["Shipping_Fee", "Shipping Fee", "shipping_fee"],
+    "gst": ["GST", "gst"],
+    "tcs": ["TCS", "tcs"],
+    "tds": ["TDS", "tds"],
+    "adjustment": ["Adjustment", "adjustment"],
+    "net_settlement": ["Net_Settlement", "Net Settlement", "net_settlement"]
+  },
+  "default_marketplace": "Unknown"
+}

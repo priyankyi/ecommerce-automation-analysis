@@ -1,0 +1,48 @@
+# Local environments and credentials
+.venv/
+venv/
+env/
+credentials.json
+token.json
+*.secret
+.env
+*.env
+!config/*_template*
+
+# Keep empty folder markers while ignoring real content
+data/*
+!data/.gitkeep
+!data/input/
+!data/input/.gitkeep
+!data/output/
+!data/output/.gitkeep
+!data/logs/
+!data/logs/.gitkeep
+credentials/*
+!credentials/.gitkeep
+
+# Local data folders
+data/input/*
+data/output/*
+data/logs/*
+
+# Python caches and logs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.zip
+
+# Spreadsheet and data exports
+*.xlsx
+*.xls
+*.csv
+*.jsonl
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Existing local caches
+.pytest_cache/

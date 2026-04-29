@@ -1,0 +1,18 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "label": "project.js",
+      "file_type": "code",
+      "source_file": "C:\\Users\\priya\\Downloads\\ecommerce-automation-analysis\\project.js",
+      "source_location": "L1",
+      "id": "c_users_priya_downloads_ecommerce_automation_analysis_project_js",
+      "community": 0,
+      "norm_label": "project.js"
+    }
+  ],
+  "links": [],
+  "hyperedges": []
+}

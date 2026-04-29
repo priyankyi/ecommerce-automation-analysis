@@ -1,0 +1,75 @@
+{
+  "spreadsheet_name": "MASTER_SKU_DATABASE",
+  "sheet_name": "MASTER_SKU",
+  "headers": [
+    "SKU_ID",
+    "Product_Title",
+    "Category",
+    "Sub_Category",
+    "Brand",
+    "Model_Number",
+    "Cost_Price",
+    "MRP",
+    "Selling_Price",
+    "GST_Rate",
+    "HSN_Code",
+    "Length_cm",
+    "Width_cm",
+    "Height_cm",
+    "Dead_Weight_kg",
+    "Volumetric_Weight_kg",
+    "Final_Chargeable_Weight",
+    "Supplier_Name",
+    "Supplier_Mobile",
+    "Available_Stock",
+    "Reorder_Level",
+    "Product_Status",
+    "Remarks",
+    "Created_Date",
+    "Last_Updated"
+  ],
+  "formulas": [
+    {
+      "cell": "P2",
+      "formula": "=ROUND((L2 * M2 * N2) / 5000, 2)"
+    },
+    {
+      "cell": "Q2",
+      "formula": "=MAX(O2, P2)"
+    }
+  ],
+  "dropdowns": [
+    {
+      "range": "C2:C1000",
+      "values": [
+        "Rope Light",
+        "Strip Light",
+        "Solar Light",
+        "Flood Light",
+        "Gate Light",
+        "Study Lamp",
+        "DJ Light",
+        "Other"
+      ]
+    },
+    {
+      "range": "J2:J1000",
+      "values": [
+        "5%",
+        "12%",
+        "18%"
+      ]
+    },
+    {
+      "range": "V2:V1000",
+      "values": [
+        "Draft",
+        "Active",
+        "Hold",
+        "Discontinued",
+        "Liquidation"
+      ]
+    }
+  ]
+}
+
