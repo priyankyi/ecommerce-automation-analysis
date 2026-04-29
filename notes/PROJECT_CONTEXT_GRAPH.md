@@ -300,6 +300,24 @@ Flipkart v1 is complete and production-safe. Start the v2 upgrade track with rep
 - Do not upload `data/output`
 - Do not upload `.venv`
 
+- Upgrade 1 status: complete
+- Private GitHub repo: `https://github.com/priyankyi/ecommerce-automation-analysis.git`
+- Initial safe backup commit: `ccceff8 - Initial private backup setup`
+
+- Upgrade 2: Google Drive Auto-Archive Sync
+- Goal: copy local Flipkart run folders to Google Drive archive storage
+- Local source: `data/output/marketplaces/flipkart/runs/<run_id>`
+- Drive target: `ECOM_CONTROL_TOWER/03_RUN_ARCHIVES/FLIPKART/<run_id>`
+- Upload only run archive outputs and metadata
+- Make the sync idempotent by `run_id` so duplicate folders/files are not created
+- Do not run the full Flipkart pipeline
+- Do not change core Flipkart calculations
+- Do not touch `MASTER_SKU`
+- Do not touch other marketplaces
+- Do not upload credentials, token files, or `.venv`
+- Upgrade 2 status: `src/marketplaces/flipkart/sync_flipkart_run_archive_to_drive.py` and `src/marketplaces/flipkart/verify_flipkart_drive_archive_sync.py` added
+- Upgrade 2 status: live Drive sync verification is still pending; keep this as a separate archive command, not part of the pipeline
+
 ### V2 Guardrails
 - Keep Flipkart v1 untouched
 - Keep core analysis calculations unchanged
@@ -310,6 +328,7 @@ Flipkart v1 is complete and production-safe. Start the v2 upgrade track with rep
 - Keep backup and history changes separate from analysis calculations
 - Keep output audit-friendly and token-efficient
 - Build only one upgrade at a time
+- Build Upgrade 2 as a storage/archive sync only, not a recalculation layer
 
 ### Working Rules
 - `FSN` remains the primary key, primary filter, and primary join key

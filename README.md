@@ -205,6 +205,18 @@ Flipkart history tabs:
 - `FLIPKART_FSN_HISTORY` tracks one row per FSN per run
 - Both tabs are append-only and preserve prior runs
 
+Google Drive archive sync:
+```powershell
+python -m src.marketplaces.flipkart.sync_flipkart_run_archive_to_drive
+python -m src.marketplaces.flipkart.verify_flipkart_drive_archive_sync
+python -m src.marketplaces.flipkart.sync_flipkart_run_archive_to_drive --run-id FLIPKART_YYYYMMDD_HHMMSS
+```
+
+Google Drive archive SOP:
+- Local run archives live under `data/output/marketplaces/flipkart/runs/<run_id>`
+- The archive sync mirrors each completed run to `ECOM_CONTROL_TOWER/03_RUN_ARCHIVES/FLIPKART/<run_id>`
+- Unsafe files, credentials, token files, `.env`, `.venv`, `__pycache__`, and `.pyc` files are skipped
+
 Final Flipkart SOP:
 
 A. When raw Flipkart reports change:
