@@ -222,6 +222,17 @@ Run quality score SOP:
 - Do not rerun the full pipeline to refresh this layer unless upstream report tabs changed.
 - Upgrade 7 stays standalone; use the two `python -m` commands above instead of the full wrapper.
 
+Flipkart module confidence:
+```powershell
+python -m src.marketplaces.flipkart.create_flipkart_module_confidence
+python -m src.marketplaces.flipkart.verify_flipkart_module_confidence
+```
+
+Module confidence SOP:
+- Use this as a standalone confidence layer for FSN-level module health.
+- Do not wire it into the full wrapper yet.
+- Keep the source tabs untouched except for the non-destructive `FLIPKART_SKU_ANALYSIS` confidence columns.
+
 Looker Studio connection guide:
 1. Open Looker Studio
 2. Create blank report

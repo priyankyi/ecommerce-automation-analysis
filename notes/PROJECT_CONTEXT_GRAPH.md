@@ -147,16 +147,23 @@ Phase 23 - Flipkart Adjustment Ledger
 - Latest Upgrade 5 verification result: `status=PASS`
 
 ## Next Phase
-Upgrade 7 - Run Quality Score
+Upgrade 8 - Module-wise Data Confidence
 
 ## Current Focus
-Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, and Upgrade 7 run quality score is implemented and compile-checked.
+Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, and Upgrade 7 run quality score is complete and verified.
 - Upgrade 6 implementation files are now in place: `src/marketplaces/flipkart/create_flipkart_report_format_baseline.py`, `src/marketplaces/flipkart/check_flipkart_report_format_drift.py`, and `src/marketplaces/flipkart/verify_flipkart_report_format_monitor.py`
 - The remaining safe next step is a known-good baseline capture followed by recurring drift checks, not a full Flipkart pipeline rerun
 - Upgrade 6 monitor classification is now stable: helper and empty sheets are treated separately from data sheets, and the immediate baseline-vs-current check returns `critical_issue_count=0`
-- Upgrade 6 is complete and verified; the next user-directed slice is `Upgrade 7 - Run Quality Score`
-- Upgrade 7 implementation files are now in place: `src/marketplaces/flipkart/run_quality_score_utils.py`, `src/marketplaces/flipkart/create_flipkart_run_quality_score.py`, and `src/marketplaces/flipkart/verify_flipkart_run_quality_score.py`
-- Upgrade 7 now writes `FLIPKART_RUN_QUALITY_SCORE`, `FLIPKART_RUN_QUALITY_BREAKDOWN`, and `LOOKER_FLIPKART_RUN_QUALITY_SCORE` only, without touching the full wrapper or manual tabs
+- Upgrade 7 result: `run_id=FLIPKART_20260429_181349`, `overall_score=74.91`, `grade=Usable With Warnings`, `decision_recommendation=Use Carefully`
+- Upgrade 7 result: `critical_warnings=COGS completion is below 70%`, `major_warnings=Ads mapping quality is weak | Critical alerts need immediate attention`
+- Upgrade 7 verification result: `status=PASS`
+- Upgrade 8 next focus: module-wise FSN confidence so the user can see which module is strong or weak at a glance
+- Upgrade 8 scope: confidence output tabs only, non-destructive columns only, no full pipeline, no core calculation changes, no normalized parser changes, no `MASTER_SKU` edits, no other marketplace edits
+- Upgrade 8 implementation files added: `src/marketplaces/flipkart/create_flipkart_module_confidence.py`, `src/marketplaces/flipkart/verify_flipkart_module_confidence.py`
+- Upgrade 8 output tabs: `FLIPKART_MODULE_CONFIDENCE`, `LOOKER_FLIPKART_MODULE_CONFIDENCE`, `FLIPKART_DATA_GAP_SUMMARY`
+- Upgrade 8 source update: `FLIPKART_SKU_ANALYSIS` now carries non-destructive `Overall_Confidence_Score`, `Overall_Confidence_Status`, `Primary_Data_Gap`, and `Suggested_Data_Action` columns
+- Upgrade 8 validation step: `python -m py_compile src/marketplaces/flipkart/create_flipkart_module_confidence.py src/marketplaces/flipkart/verify_flipkart_module_confidence.py`
+- Upgrade 8 remains standalone for now; do not wire it into the full wrapper yet
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -418,6 +425,8 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Upgrade 7: Run Quality Score
 - Goal: create a trust score for every Flipkart run so the latest run can be judged for business readiness
 - Scope: score/output tabs only
+- Latest Upgrade 7 result: `run_id=FLIPKART_20260429_181349`, `overall_score=74.91`, `grade=Usable With Warnings`, `decision_recommendation=Use Carefully`
+- Latest Upgrade 7 result: `critical_warnings=COGS completion is below 70%`, `major_warnings=Ads mapping quality is weak | Critical alerts need immediate attention`, `verification status=PASS`
 - Consider report format drift, required tabs, target FSN count, order mapping, settlement/P&L coverage, COGS completion, ads mapping, returns mapping, listing coverage, data confidence, missing COGS, missing active listings, and critical alerts
 - Do not run the full Flipkart pipeline
 - Do not change core calculations
@@ -425,7 +434,7 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Do not touch `MASTER_SKU`
 - Do not touch other marketplaces
 - Keep the score layer separate from business recalculation
-- Latest Upgrade 7 verification: `status=PASS_WITH_WARNINGS`, `latest_trust_score=73.67`, `latest_reliability_level=Not Reliable`, `run_count=4`, `factor_count=52`
+- Upgrade 7 is complete and verified; the next user-directed slice is `Upgrade 8 - Module-wise Data Confidence`
 
 ### V2 Guardrails
 - Keep Flipkart v1 untouched
