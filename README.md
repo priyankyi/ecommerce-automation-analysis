@@ -191,6 +191,13 @@ python -m src.marketplaces.flipkart.create_flipkart_run_comparison
 python -m src.marketplaces.flipkart.verify_flipkart_run_comparison
 ```
 
+Flipkart adjustment ledger:
+```powershell
+python -m src.marketplaces.flipkart.create_flipkart_adjustment_ledger
+python -m src.marketplaces.flipkart.apply_flipkart_adjustments
+python -m src.marketplaces.flipkart.verify_flipkart_adjustment_ledger
+```
+
 Looker Studio connection guide:
 1. Open Looker Studio
 2. Create blank report

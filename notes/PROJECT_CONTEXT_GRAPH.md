@@ -134,12 +134,18 @@ Phase 22 - Flipkart Run Comparison
 - Latest Upgrade 4 run summary: `improved_count=0`, `worsened_count=0`, `no_change_count=14`, `not_enough_history=0`
 - Latest Upgrade 4 local outputs: `flipkart_run_comparison.csv`, `flipkart_fsn_run_comparison.csv`, `looker_flipkart_run_comparison.csv`
 - Latest Upgrade 4 log: `data/logs/marketplaces/flipkart/flipkart_run_comparison_log.csv`
+- `src/marketplaces/flipkart/flipkart_sheet_helpers.py` added
+- `src/marketplaces/flipkart/create_flipkart_adjustment_ledger.py` added
+- `src/marketplaces/flipkart/apply_flipkart_adjustments.py` added
+- `src/marketplaces/flipkart/verify_flipkart_adjustment_ledger.py` added
+- Upgrade 5 adjustment ledger scaffold is in place; live-sheet execution and verification are next
+- Latest Upgrade 5 validation: `py_compile passed`
 
 ## Next Phase
-Pending user direction
+Upgrade 5 - Flipkart Adjustment Ledger
 
 ## Current Focus
-Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built and verified, so the v2 upgrade track is waiting on the next user-directed slice.
+Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built and verified, and Upgrade 5 adjustment ledger scripts are scaffolded and compile cleanly.
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -158,6 +164,10 @@ Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built a
 - Latest Upgrade 4 result: `run_status_distribution=No Change:14, New:8`, `comparison_status_distribution=No Major Change:123`
 - Latest Upgrade 4 verification: `status=PASS`, `blank_fsn_count=0`, `not_enough_history=0`
 - Latest Upgrade 4 tabs created/updated: `FLIPKART_RUN_COMPARISON`, `FLIPKART_FSN_RUN_COMPARISON`, `LOOKER_FLIPKART_RUN_COMPARISON`
+- Upgrade 5 scripts scaffolded: `create_flipkart_adjustment_ledger.py`, `apply_flipkart_adjustments.py`, `verify_flipkart_adjustment_ledger.py`
+- Upgrade 5 validation: `py_compile passed`
+- Next stage starting: live Google Sheet execution for `Upgrade 5 - Flipkart Adjustment Ledger`
+- Upgrade 5 rules: adjustment ledger only, manually editable, original profit unchanged, adjusted profit separate, no full pipeline, no overwrite of `FLIPKART_FSN_HISTORY`
 - Current production features:
   - one-command PowerShell wrapper works
   - Python runner remains the underlying execution path
@@ -360,6 +370,27 @@ Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built a
 - Do not touch other marketplaces
 - Do not wipe manual tabs
 - Keep comparison outputs separate from analysis calculations
+- Upgrade 4 status: complete and verified
+- Upgrade 4 latest run: `FLIPKART_20260429_181349`
+- Upgrade 4 previous run: `FLIPKART_20260429_124238`
+- Upgrade 4 verification: `PASS`
+- Upgrade 4 row counts: `run_comparison_rows=22`, `fsn_comparison_rows=123`, `LOOKER_FLIPKART_RUN_COMPARISON rows=22`
+- Upgrade 4 history counts: `history_run_count=4`, `fsn_history_rows=492`
+
+- Upgrade 5: Flipkart Adjustment Ledger
+- Goal: create an adjustment ledger to handle delayed Flipkart deductions/additions without overwriting original run history
+- Scope: adjustment ledger only
+- The ledger must be manually editable
+- Original profit stays unchanged
+- Adjusted profit is calculated separately
+- Do not run the full Flipkart pipeline
+- Do not change core historical run data
+- Do not overwrite `FLIPKART_FSN_HISTORY`
+- Do not touch `MASTER_SKU`
+- Do not touch other marketplaces
+- Do not wipe manual tabs
+- Do not rebuild completed phases
+- Keep adjustment outputs separate from analysis calculations
 
 ### V2 Guardrails
 - Keep Flipkart v1 untouched
@@ -374,6 +405,7 @@ Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built a
 - Build Upgrade 2 as a storage/archive sync only, not a recalculation layer
 - Build Upgrade 3 as a source-tab foundation only, not a recalculation layer
 - Build Upgrade 4 as a comparison layer only, not a recalculation layer
+- Build Upgrade 5 as an adjustment layer only, not a recalculation layer
 
 ### Working Rules
 - `FSN` remains the primary key, primary filter, and primary join key
