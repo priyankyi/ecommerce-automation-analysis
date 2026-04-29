@@ -15,8 +15,17 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.auth_google import build_services
-from src.integrations.visual_search.search_google_lens_flipkart_only import search_flipkart_only
-from src.integrations.visual_search.visual_search_config import resolve_visual_search_config_path
+from src.integrations.visual_search.search_google_lens_flipkart_only import (
+    append_usage_log_row,
+    count_usage_calls_for_month,
+    current_month_key,
+    hash_image_url,
+    load_usage_log,
+    month_image_hash_seen,
+    search_flipkart_only,
+    USAGE_LOG_PATH,
+)
+from src.integrations.visual_search.visual_search_config import extract_visual_search_limits, load_visual_search_config, resolve_visual_search_config_path
 from src.marketplaces.flipkart.flipkart_sheet_helpers import clear_tab, ensure_tab, freeze_and_format, load_json, read_table, tab_exists, write_rows
 from src.marketplaces.flipkart.flipkart_utils import LOG_DIR, OUTPUT_DIR, append_csv_log, clean_fsn, ensure_directories, normalize_text, now_iso, parse_float
 
@@ -25,6 +34,7 @@ LOG_PATH = LOG_DIR / "flipkart_visual_competitor_search_log.csv"
 LOCAL_QUEUE_PATH = OUTPUT_DIR / "flipkart_competitor_search_queue.csv"
 LOCAL_RESULTS_PATH = OUTPUT_DIR / "flipkart_visual_competitor_results.csv"
 RESULT_CACHE_PATH = OUTPUT_DIR / "flipkart_visual_search_cache.json"
+USAGE_LOG_PATH_LOCAL = USAGE_LOG_PATH
 
 QUEUE_TAB = "FLIPKART_COMPETITOR_SEARCH_QUEUE"
 RESULTS_TAB = "FLIPKART_VISUAL_COMPETITOR_RESULTS"
@@ -210,23 +220,14 @@ def load_results_rows(sheets_service, spreadsheet_id: str) -> Tuple[List[str], L
     return read_table(sheets_service, spreadsheet_id, RESULTS_TAB)
 
 
-def process_queue_row(queue_row: Dict[str, str]) -> Tuple[str, List[Dict[str, Any]], str, bool]:
-    image_url = normalize_text(queue_row.get("Product_Image_URL", ""))
-    query = normalize_text(queue_row.get("Product_Title", "")) or normalize_text(queue_row.get("SKU_ID", ""))
-    if not image_url and not query:
-        return "No Search Input", [], "No image or fallback query available.", False
-    search_payload = search_flipkart_only(image_url=image_url, query=query, config_path=resolve_visual_search_config_path(), use_cache=True)
-    if search_payload["status"] == "NEEDS_CREDENTIALS":
-        return "API Pending", [], "Credentials missing; search not called.", False
-    if search_payload["status"] == "NO_SEARCH_INPUT":
-        return "No Search Input", [], "No image or fallback query available.", False
-    if search_payload["status"] == "ERROR":
-        return "Search Error", [], search_payload.get("message", "Search failed."), bool(search_payload.get("api_called"))
-    raw_results = search_payload.get("results", [])
-    result_rows = [make_result_row(queue_row, raw_result) for raw_result in raw_results if normalize_text(raw_result.get("Competitor_Link", ""))]
-    if not result_rows:
-        return "No Flipkart Match Found", [], search_payload.get("message", "No Flipkart results found."), bool(search_payload.get("api_called"))
-    return "Completed", result_rows, search_payload.get("message", "Flipkart results found."), bool(search_payload.get("api_called"))
+def parse_int(value: Any, default: int) -> int:
+    text = normalize_text(value)
+    if not text:
+        return default
+    try:
+        return max(0, int(float(text)))
+    except ValueError:
+        return default
 
 
 def run_flipkart_visual_competitor_search(max_fsns: int = 5, force: bool = False, sleep_seconds: int = 3) -> Dict[str, Any]:
@@ -237,6 +238,16 @@ def run_flipkart_visual_competitor_search(max_fsns: int = 5, force: bool = False
     meta = load_json(SPREADSHEET_META_PATH)
     spreadsheet_id = meta["spreadsheet_id"]
     sheets_service, _, _ = build_services()
+    config_payload = load_visual_search_config()
+    provider_config = config_payload.get("config") or {}
+    limits = extract_visual_search_limits(provider_config)
+    monthly_limit = limits["monthly_limit"]
+    safe_monthly_limit = limits["safe_monthly_limit"]
+    provider = normalize_text(provider_config.get("VISUAL_SEARCH_PROVIDER", "SERPAPI_GOOGLE_LENS")).upper() or "SERPAPI_GOOGLE_LENS"
+    current_month = current_month_key()
+    usage_rows = load_usage_log()
+    month_calls_used = count_usage_calls_for_month(usage_rows, current_month, provider)
+    remaining_safe_calls = max(0, safe_monthly_limit - month_calls_used)
 
     if not tab_exists(sheets_service, spreadsheet_id, QUEUE_TAB):
         raise FileNotFoundError(f"Missing required Google Sheet tab: {QUEUE_TAB}")
@@ -257,61 +268,131 @@ def run_flipkart_visual_competitor_search(max_fsns: int = 5, force: bool = False
     updated_queue_rows = [dict(row) for row in queue_rows]
     new_results: List[Dict[str, Any]] = []
     processed_fsns: List[str] = []
-    skipped_fsns: List[str] = []
+    skipped_already_searched = 0
+    skipped_missing_image_url = 0
     api_called_count = 0
     no_match_count = 0
     needs_credentials_count = 0
     status_counter = Counter()
     message_notes: List[str] = []
+    quota_guard_stopped = False
+    force_warning = bool(force)
 
     for row in pending_rows:
         fsn = clean_fsn(row.get("FSN", ""))
         if not fsn:
             continue
         processed_fsns.append(fsn)
-        new_status, result_rows, message, api_called = process_queue_row(row)
+        image_url = normalize_text(row.get("Product_Image_URL", ""))
+        query = normalize_text(row.get("Product_Title", "")) or normalize_text(row.get("SKU_ID", ""))
+        image_url_hash = hash_image_url(image_url)
+
+        if not image_url:
+            skipped_missing_image_url += 1
+            message_notes.append(f"{fsn}: skipped missing Product_Image_URL")
+            for current in updated_queue_rows:
+                if clean_fsn(current.get("FSN", "")) == fsn:
+                    current["Search_Status"] = "Needs Image URL"
+                    current["Last_Updated"] = now_iso()
+                    break
+            continue
+
+        if not force and month_image_hash_seen(usage_rows, current_month, provider, fsn, image_url_hash):
+            skipped_already_searched += 1
+            message_notes.append(f"{fsn}: skipped already searched this month")
+            for current in updated_queue_rows:
+                if clean_fsn(current.get("FSN", "")) == fsn:
+                    current["Search_Status"] = "Already Searched This Month"
+                    current["Last_Updated"] = now_iso()
+                    break
+            continue
+
+        month_calls_used = count_usage_calls_for_month(usage_rows, current_month, provider)
+        remaining_safe_calls = max(0, safe_monthly_limit - month_calls_used)
+        if month_calls_used >= safe_monthly_limit:
+            quota_guard_stopped = True
+            message_notes.append("monthly safe limit reached")
+            break
+
+        search_payload = search_flipkart_only(image_url=image_url, query=query, config_path=resolve_visual_search_config_path(), use_cache=True)
+        api_called = bool(search_payload.get("api_called"))
         if api_called:
             api_called_count += 1
-        if new_status == "API Pending":
-            needs_credentials_count += 1
-        if new_status == "No Flipkart Match Found":
-            no_match_count += 1
-        status_counter[new_status] += 1
-        message_notes.append(f"{fsn}: {message}")
 
-        for index, current in enumerate(updated_queue_rows):
+        raw_results = search_payload.get("results", [])
+        result_rows = [make_result_row(row, raw_result) for raw_result in raw_results if normalize_text(raw_result.get("Competitor_Link", ""))]
+        search_status = "Completed"
+        if search_payload["status"] == "NEEDS_CREDENTIALS":
+            search_status = "API Pending"
+            needs_credentials_count += 1
+        elif search_payload["status"] == "ERROR":
+            search_status = "Search Error"
+        elif not result_rows:
+            search_status = "No Flipkart Match Found"
+            no_match_count += 1
+
+        if api_called:
+            append_usage_log_row(
+                {
+                    "timestamp": now_iso(),
+                    "month": current_month,
+                    "provider": provider,
+                    "fsn": fsn,
+                    "image_url_hash": image_url_hash,
+                    "api_called": True,
+                    "status": search_payload.get("status", ""),
+                    "results_returned": len(result_rows),
+                }
+            )
+            usage_rows.append(
+                {
+                    "timestamp": now_iso(),
+                    "month": current_month,
+                    "provider": provider,
+                    "fsn": fsn,
+                    "image_url_hash": image_url_hash,
+                    "api_called": "true",
+                    "status": search_payload.get("status", ""),
+                    "results_returned": str(len(result_rows)),
+                }
+            )
+
+        for current in updated_queue_rows:
             if clean_fsn(current.get("FSN", "")) == fsn:
-                if new_status != "API Pending":
-                    current["Search_Status"] = new_status
-                    current["Last_Updated"] = now_iso()
+                current["Search_Status"] = search_status
+                current["Last_Updated"] = now_iso()
                 break
         if result_rows:
             new_results.extend(result_rows)
-        elif new_status == "No Flipkart Match Found":
-            skipped_fsns.append(fsn)
+
+        status_counter[search_status] += 1
+        message_notes.append(f"{fsn}: {search_status}")
 
         if sleep_seconds > 0 and api_called:
             import time
 
             time.sleep(sleep_seconds)
 
+    month_calls_used = count_usage_calls_for_month(usage_rows, current_month, provider)
+    remaining_safe_calls = max(0, safe_monthly_limit - month_calls_used)
     merged_results = merge_result_rows(existing_results_rows, new_results, processed_fsns if force else [])
 
     write_local_csv(LOCAL_QUEUE_PATH, QUEUE_PROCESS_HEADERS, updated_queue_rows)
     write_local_csv(LOCAL_RESULTS_PATH, RESULT_HEADERS, merged_results)
 
-    if needs_credentials_count == len(processed_fsns) and processed_fsns:
+    if quota_guard_stopped:
+        local_status = "QUOTA_GUARD_STOPPED"
+    elif needs_credentials_count == len(processed_fsns) and processed_fsns:
         local_status = "NEEDS_CREDENTIALS"
     elif processed_fsns:
         local_status = "SUCCESS"
     else:
         local_status = "NO_PENDING_ROWS"
 
-    if local_status != "NEEDS_CREDENTIALS":
-        queue_sheet_id = ensure_tab(sheets_service, spreadsheet_id, QUEUE_TAB)
-        results_sheet_id = ensure_tab(sheets_service, spreadsheet_id, RESULTS_TAB)
-        write_output_tab(sheets_service, spreadsheet_id, QUEUE_TAB, QUEUE_PROCESS_HEADERS, updated_queue_rows)
-        write_output_tab(sheets_service, spreadsheet_id, RESULTS_TAB, RESULT_HEADERS, merged_results)
+    write_local_csv(LOCAL_QUEUE_PATH, QUEUE_PROCESS_HEADERS, updated_queue_rows)
+    write_local_csv(LOCAL_RESULTS_PATH, RESULT_HEADERS, merged_results)
+    write_output_tab(sheets_service, spreadsheet_id, QUEUE_TAB, QUEUE_PROCESS_HEADERS, updated_queue_rows)
+    write_output_tab(sheets_service, spreadsheet_id, RESULTS_TAB, RESULT_HEADERS, merged_results)
 
     log_row = {
         "timestamp": now_iso(),
@@ -346,20 +427,18 @@ def run_flipkart_visual_competitor_search(max_fsns: int = 5, force: bool = False
 
     payload = {
         "status": local_status,
+        "monthly_limit": monthly_limit,
+        "safe_monthly_limit": safe_monthly_limit,
+        "month_calls_used": month_calls_used,
+        "remaining_safe_calls": remaining_safe_calls,
         "processed_fsns": len(processed_fsns),
         "api_called_count": api_called_count,
-        "no_match_count": no_match_count,
-        "needs_credentials_count": needs_credentials_count,
-        "queue_rows": len(updated_queue_rows),
         "visual_result_rows": len(merged_results),
-        "processed_fsns_list": processed_fsns,
-        "skipped_fsns": skipped_fsns,
-        "tabs_updated": [QUEUE_TAB, RESULTS_TAB] if local_status != "NEEDS_CREDENTIALS" else [],
-        "local_outputs": {
-            "queue": str(LOCAL_QUEUE_PATH),
-            "results": str(LOCAL_RESULTS_PATH),
-        },
+        "skipped_already_searched": skipped_already_searched,
+        "skipped_missing_image_url": skipped_missing_image_url,
+        "quota_guard_stopped": quota_guard_stopped,
         "log_path": str(LOG_PATH),
+        "force_warning": force_warning,
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return payload

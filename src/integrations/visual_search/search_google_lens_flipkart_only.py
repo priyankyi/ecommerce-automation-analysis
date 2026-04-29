@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -14,6 +16,7 @@ from .visual_search_config import load_visual_search_config
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_DIR = PROJECT_ROOT / "data" / "output" / "marketplaces" / "flipkart"
 CACHE_PATH = OUTPUT_DIR / "flipkart_visual_search_cache.json"
+USAGE_LOG_PATH = PROJECT_ROOT / "data" / "logs" / "marketplaces" / "flipkart" / "visual_search_usage_log.csv"
 DEFAULT_TIMEOUT_SECONDS = 30
 DEFAULT_PROVIDER = "SERPAPI_GOOGLE_LENS"
 FLIPKART_DOMAIN_HINT = "flipkart.com"
@@ -59,6 +62,55 @@ def load_cache(path: Path = CACHE_PATH) -> Dict[str, Any]:
     return {}
 
 
+def load_usage_log(path: Path = USAGE_LOG_PATH) -> List[Dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        return [dict(row) for row in csv.DictReader(handle)]
+
+
+def append_usage_log_row(row: Dict[str, Any], path: Path = USAGE_LOG_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_exists = path.exists()
+    headers = ["timestamp", "month", "provider", "fsn", "image_url_hash", "api_called", "status", "results_returned"]
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=headers)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow({header: row.get(header, "") for header in headers})
+
+
+def current_month_key(moment: Optional[datetime] = None) -> str:
+    return (moment or datetime.now()).strftime("%Y-%m")
+
+
+def count_usage_calls_for_month(rows: List[Dict[str, str]], month: str, provider: str) -> int:
+    provider_norm = normalize_text(provider).upper()
+    return sum(
+        1
+        for row in rows
+        if normalize_text(row.get("month", "")) == month
+        and normalize_text(row.get("provider", "")).upper() == provider_norm
+        and normalize_text(row.get("api_called", "")).lower() in {"true", "1", "yes", "y"}
+    )
+
+
+def month_image_hash_seen(rows: List[Dict[str, str]], month: str, provider: str, fsn: str, image_url_hash: str) -> bool:
+    provider_norm = normalize_text(provider).upper()
+    fsn_norm = normalize_text(fsn).upper()
+    hash_norm = normalize_text(image_url_hash)
+    if not fsn_norm or not hash_norm:
+        return False
+    return any(
+        normalize_text(row.get("month", "")) == month
+        and normalize_text(row.get("provider", "")).upper() == provider_norm
+        and normalize_text(row.get("fsn", "")).upper() == fsn_norm
+        and normalize_text(row.get("image_url_hash", "")) == hash_norm
+        and normalize_text(row.get("api_called", "")).lower() in {"true", "1", "yes", "y"}
+        for row in rows
+    )
+
+
 def save_cache(cache: Dict[str, Any], path: Path = CACHE_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -67,6 +119,13 @@ def save_cache(cache: Dict[str, Any], path: Path = CACHE_PATH) -> None:
 def build_cache_key(provider: str, image_url: str, query: str, country: str, language: str) -> str:
     raw = "|".join([provider, normalize_text(image_url), normalize_text(query), normalize_text(country).lower(), normalize_text(language).lower()])
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def hash_image_url(image_url: str) -> str:
+    normalized = normalize_text(image_url)
+    if not normalized:
+        return ""
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def competitor_link_is_flipkart(link: str) -> bool:

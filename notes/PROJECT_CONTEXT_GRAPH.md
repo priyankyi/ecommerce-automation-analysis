@@ -172,6 +172,7 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Upgrade 9 verification result: `verify_google_keyword_metrics_cache status=PASS_WITH_WARNINGS`, warning=`CACHE_EMPTY`
 - Upgrade 10 implementation is now in place; optional credentialed verification is next if needed
 - Upgrade 10 scope: optional and cached competitor lookup, Flipkart.com URLs only, no aggressive scraping, no `MASTER_SKU`, no other marketplaces, no core P&L changes, no auto price changes, no auto ads changes without clear output
+- Upgrade 10 quota guard now uses a local usage ledger at `data/logs/marketplaces/flipkart/visual_search_usage_log.csv`
 - Upgrade 10 must start with Scale Ads + Test Ads FSNs only
 
 ### Latest Flipkart Status
@@ -290,6 +291,7 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Keep the competitor lookup optional and cached
 - Keep URLs Flipkart-only and skip other marketplaces
 - Start with Scale Ads + Test Ads FSNs only
+- Enforce the 200-search safe monthly limit before live calls
 - Do not run the full Flipkart pipeline
 - Do not scrape Flipkart aggressively
 - Do not touch `MASTER_SKU`

@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "credentials" / "visual_search.env"
 CONFIG_ENV_VAR = "VISUAL_SEARCH_CONFIG_PATH"
 REQUIRED_KEYS = ("VISUAL_SEARCH_PROVIDER", "SERPAPI_API_KEY", "VISUAL_SEARCH_COUNTRY", "VISUAL_SEARCH_LANGUAGE")
+OPTIONAL_LIMIT_KEYS = ("VISUAL_SEARCH_MONTHLY_LIMIT", "VISUAL_SEARCH_SAFE_MONTHLY_LIMIT")
 PLACEHOLDER_HINTS = ("YOUR_", "OPTIONAL_", "REPLACE_", "TODO", "CHANGE_ME")
 
 
@@ -65,6 +66,24 @@ def looks_like_placeholder(value: Any) -> bool:
     return any(hint in text for hint in PLACEHOLDER_HINTS)
 
 
+def parse_positive_int(value: Any, default: int) -> int:
+    text = str(value or "").strip()
+    if not text:
+        return default
+    try:
+        parsed = int(float(text))
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
+def extract_visual_search_limits(config: Dict[str, Any]) -> Dict[str, int]:
+    return {
+        "monthly_limit": parse_positive_int(config.get("VISUAL_SEARCH_MONTHLY_LIMIT", ""), 250),
+        "safe_monthly_limit": parse_positive_int(config.get("VISUAL_SEARCH_SAFE_MONTHLY_LIMIT", ""), 200),
+    }
+
+
 def load_visual_search_config(config_path: str | Path | None = None) -> Dict[str, Any]:
     path = resolve_visual_search_config_path(config_path)
     payload: Dict[str, Any] = {
@@ -82,18 +101,27 @@ def load_visual_search_config(config_path: str | Path | None = None) -> Dict[str
     sanitized: Dict[str, str] = {}
     missing_keys = []
 
-    for key in REQUIRED_KEYS:
-        value = str(raw_config.get(key, "")).strip()
+    for key, value in raw_config.items():
+        value = str(value).strip()
         if not value or looks_like_placeholder(value):
-            missing_keys.append(key)
+            if key in REQUIRED_KEYS:
+                missing_keys.append(key)
             continue
         sanitized[key] = value
+
+    for key in REQUIRED_KEYS:
+        if key not in sanitized and key not in missing_keys:
+            missing_keys.append(key)
 
     payload["config_exists"] = True
     payload["missing_keys"] = missing_keys
     if missing_keys:
         payload["status"] = "NEEDS_CREDENTIALS" if "SERPAPI_API_KEY" in missing_keys else "INVALID_CONFIG"
         return payload
+
+    for key in OPTIONAL_LIMIT_KEYS:
+        if key in raw_config:
+            sanitized[key] = str(raw_config.get(key, "")).strip()
 
     payload["status"] = "SUCCESS"
     payload["config"] = sanitized
