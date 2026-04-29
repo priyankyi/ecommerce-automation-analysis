@@ -4,3 +4,4 @@ client_secret: "YOUR_CLIENT_SECRET"
 refresh_token: "YOUR_REFRESH_TOKEN"
 customer_id: "YOUR_CUSTOMER_ID"
 login_customer_id: "OPTIONAL_MANAGER_ACCOUNT_ID"
+use_proto_plus: true

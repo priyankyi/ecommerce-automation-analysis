@@ -147,23 +147,23 @@ Phase 23 - Flipkart Adjustment Ledger
 - Latest Upgrade 5 verification result: `status=PASS`
 
 ## Next Phase
-Upgrade 8 - Module-wise Data Confidence
+Upgrade 9 - Google Keyword Planner API Interface
 
 ## Current Focus
-Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, and Upgrade 7 run quality score is complete and verified.
+Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, and Upgrade 8 module-wise data confidence is complete and verified.
 - Upgrade 6 implementation files are now in place: `src/marketplaces/flipkart/create_flipkart_report_format_baseline.py`, `src/marketplaces/flipkart/check_flipkart_report_format_drift.py`, and `src/marketplaces/flipkart/verify_flipkart_report_format_monitor.py`
 - The remaining safe next step is a known-good baseline capture followed by recurring drift checks, not a full Flipkart pipeline rerun
 - Upgrade 6 monitor classification is now stable: helper and empty sheets are treated separately from data sheets, and the immediate baseline-vs-current check returns `critical_issue_count=0`
 - Upgrade 7 result: `run_id=FLIPKART_20260429_181349`, `overall_score=74.91`, `grade=Usable With Warnings`, `decision_recommendation=Use Carefully`
 - Upgrade 7 result: `critical_warnings=COGS completion is below 70%`, `major_warnings=Ads mapping quality is weak | Critical alerts need immediate attention`
 - Upgrade 7 verification result: `status=PASS`
-- Upgrade 8 next focus: module-wise FSN confidence so the user can see which module is strong or weak at a glance
-- Upgrade 8 scope: confidence output tabs only, non-destructive columns only, no full pipeline, no core calculation changes, no normalized parser changes, no `MASTER_SKU` edits, no other marketplace edits
-- Upgrade 8 implementation files added: `src/marketplaces/flipkart/create_flipkart_module_confidence.py`, `src/marketplaces/flipkart/verify_flipkart_module_confidence.py`
-- Upgrade 8 output tabs: `FLIPKART_MODULE_CONFIDENCE`, `LOOKER_FLIPKART_MODULE_CONFIDENCE`, `FLIPKART_DATA_GAP_SUMMARY`
-- Upgrade 8 source update: `FLIPKART_SKU_ANALYSIS` now carries non-destructive `Overall_Confidence_Score`, `Overall_Confidence_Status`, `Primary_Data_Gap`, and `Suggested_Data_Action` columns
-- Upgrade 8 validation step: `python -m py_compile src/marketplaces/flipkart/create_flipkart_module_confidence.py src/marketplaces/flipkart/verify_flipkart_module_confidence.py`
-- Upgrade 8 remains standalone for now; do not wire it into the full wrapper yet
+- Upgrade 8 result: `run_id=FLIPKART_20260429_181349`, `fsn_count=123`, `average_overall_confidence=78.57`
+- Upgrade 8 result: `HIGH confidence=42`, `MEDIUM confidence=68`, `LOW confidence=13`
+- Upgrade 8 result: `primary data gaps=COGS Missing:63 | Format Issue:36 | Ads Mapping Weak:15 | Listing Missing:9`
+- Upgrade 8 verification result: `status=PASS`
+- Upgrade 9 next focus: Google Ads / Keyword Planner interface for monthly keyword demand refresh
+- Upgrade 9 scope: API-ready, cached, production-safe, optional credentials only, no full pipeline, no Flipkart API, no `MASTER_SKU`, no other marketplace edits
+- Upgrade 9 must refresh `GOOGLE_KEYWORD_METRICS_CACHE` monthly and then update `PRODUCT_TYPE_DEMAND_PROFILE`
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -434,7 +434,7 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Do not touch `MASTER_SKU`
 - Do not touch other marketplaces
 - Keep the score layer separate from business recalculation
-- Upgrade 7 is complete and verified; the next user-directed slice is `Upgrade 8 - Module-wise Data Confidence`
+- Upgrade 8 is complete and verified; the next user-directed slice is `Upgrade 9 - Google Keyword Planner API Interface`
 
 ### V2 Guardrails
 - Keep Flipkart v1 untouched

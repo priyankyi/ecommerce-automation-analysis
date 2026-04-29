@@ -173,6 +173,24 @@ python -m src.marketplaces.flipkart.update_flipkart_ads_recommendations
 python -m src.marketplaces.flipkart.verify_flipkart_ads_recommendations
 ```
 
+Google Keyword Planner API setup:
+1. Do not paste credentials in chat.
+2. Put real Google Ads API credentials in `credentials/google_ads.yaml`, or point `GOOGLE_ADS_CONFIG_PATH` at another local YAML file.
+3. If you need a starting point, copy `config/google_ads_template.yaml` and replace the placeholder values locally.
+4. Run:
+```powershell
+python -m src.integrations.google_ads.test_google_ads_api_access
+```
+5. If the test returns `SUCCESS`, refresh the cache and demand profile:
+```powershell
+python -m src.marketplaces.flipkart.refresh_google_keyword_metrics --max-keywords 5
+python -m src.marketplaces.flipkart.update_product_type_demand_profile
+python -m src.marketplaces.flipkart.verify_google_keyword_metrics_cache
+```
+6. If the test returns `NEEDS_CREDENTIALS`, create `credentials/google_ads.yaml` from `config/google_ads_template.yaml`.
+7. If the test returns `API_ACCESS_NOT_READY`, confirm Basic Access and Keyword Planning permissible use in the Google Ads API center.
+8. Keep this monthly/on-demand only. Do not wire it into the full Flipkart wrapper or the dashboard refresh flow yet.
+
 Stage 9 listing presence workflow:
 ```powershell
 python -m src.marketplaces.flipkart.create_flipkart_listing_presence_workflow
