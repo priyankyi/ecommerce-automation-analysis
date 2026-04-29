@@ -147,13 +147,16 @@ Phase 23 - Flipkart Adjustment Ledger
 - Latest Upgrade 5 verification result: `status=PASS`
 
 ## Next Phase
-Upgrade 6 - Report Format Drift Monitor
+Upgrade 7 - Run Quality Score
 
 ## Current Focus
-Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, and the next user-directed slice is the report format drift monitor.
+Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, and Upgrade 7 run quality score is implemented and compile-checked.
 - Upgrade 6 implementation files are now in place: `src/marketplaces/flipkart/create_flipkart_report_format_baseline.py`, `src/marketplaces/flipkart/check_flipkart_report_format_drift.py`, and `src/marketplaces/flipkart/verify_flipkart_report_format_monitor.py`
 - The remaining safe next step is a known-good baseline capture followed by recurring drift checks, not a full Flipkart pipeline rerun
 - Upgrade 6 monitor classification is now stable: helper and empty sheets are treated separately from data sheets, and the immediate baseline-vs-current check returns `critical_issue_count=0`
+- Upgrade 6 is complete and verified; the next user-directed slice is `Upgrade 7 - Run Quality Score`
+- Upgrade 7 implementation files are now in place: `src/marketplaces/flipkart/run_quality_score_utils.py`, `src/marketplaces/flipkart/create_flipkart_run_quality_score.py`, and `src/marketplaces/flipkart/verify_flipkart_run_quality_score.py`
+- Upgrade 7 now writes `FLIPKART_RUN_QUALITY_SCORE`, `FLIPKART_RUN_QUALITY_BREAKDOWN`, and `LOOKER_FLIPKART_RUN_QUALITY_SCORE` only, without touching the full wrapper or manual tabs
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -411,6 +414,18 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Do not write business recalculation outputs
 - Keep the monitor separate from business logic
 - Latest Upgrade 6 verification: `status=PASS`, `monitor_rows=36`, `issue_rows=0`, `critical_issue_count=0`, `empty_helper_ok_count=17`, `data_sheet_ok_count=16`
+
+- Upgrade 7: Run Quality Score
+- Goal: create a trust score for every Flipkart run so the latest run can be judged for business readiness
+- Scope: score/output tabs only
+- Consider report format drift, required tabs, target FSN count, order mapping, settlement/P&L coverage, COGS completion, ads mapping, returns mapping, listing coverage, data confidence, missing COGS, missing active listings, and critical alerts
+- Do not run the full Flipkart pipeline
+- Do not change core calculations
+- Do not change normalized parsers
+- Do not touch `MASTER_SKU`
+- Do not touch other marketplaces
+- Keep the score layer separate from business recalculation
+- Latest Upgrade 7 verification: `status=PASS_WITH_WARNINGS`, `latest_trust_score=73.67`, `latest_reliability_level=Not Reliable`, `run_count=4`, `factor_count=52`
 
 ### V2 Guardrails
 - Keep Flipkart v1 untouched

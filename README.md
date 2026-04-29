@@ -210,6 +210,18 @@ Report format monitor SOP:
 - Use the drift check for the normal recurring validation cycle.
 - Refresh the baseline again only when a report format change is intentional and the parser update has been confirmed.
 
+Flipkart run quality score:
+```powershell
+python -m src.marketplaces.flipkart.create_flipkart_run_quality_score
+python -m src.marketplaces.flipkart.verify_flipkart_run_quality_score
+```
+
+Run quality score SOP:
+- Use the score to judge whether the latest run is reliable enough for business decisions.
+- Treat the score as a score/output layer only.
+- Do not rerun the full pipeline to refresh this layer unless upstream report tabs changed.
+- Upgrade 7 stays standalone; use the two `python -m` commands above instead of the full wrapper.
+
 Looker Studio connection guide:
 1. Open Looker Studio
 2. Create blank report
