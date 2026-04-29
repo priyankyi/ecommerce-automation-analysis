@@ -22,9 +22,10 @@
 19. Flipkart FSN Drilldown Dashboard
 20. Flipkart Ads Planner foundation
 21. Flipkart Ads Report Mapping
+22. Flipkart Run Comparison
 
 ## Latest Completed Phase
-Phase 21 - Flipkart Ads Report Mapping
+Phase 22 - Flipkart Run Comparison
 
 ### Added
 - `src/backup_google_sheet.py` added
@@ -123,12 +124,22 @@ Phase 21 - Flipkart Ads Report Mapping
 - Latest Stage 9 listing presence result: `critical_missing_count=3`, `high_missing_count=0`, `medium_missing_count=19`
 - Latest Stage 9 verification: `status=PASS`
 - Latest Stage 9 tabs created/updated: `FLIPKART_LISTING_PRESENCE`, `FLIPKART_MISSING_ACTIVE_LISTINGS`, `FLIPKART_LISTING_STATUS_ISSUES`, `FLIPKART_SKU_ANALYSIS`
+- `src/marketplaces/flipkart/create_flipkart_run_comparison.py` added
+- `src/marketplaces/flipkart/verify_flipkart_run_comparison.py` added
+- `FLIPKART_RUN_COMPARISON`, `FLIPKART_FSN_RUN_COMPARISON`, and `LOOKER_FLIPKART_RUN_COMPARISON` support added
+- Latest Upgrade 4 run result: `status=SUCCESS`, `latest_run_id=FLIPKART_20260429_181349`, `previous_run_id=FLIPKART_20260429_124238`, `run_comparison_rows=22`, `fsn_comparison_rows=123`
+- Latest Upgrade 4 run result: `run_status_distribution=No Change:14, New:8`, `fsn_status_distribution=No Major Change:123`
+- Latest Upgrade 4 verification result: `status=PASS`, `blank_fsn_count=0`
+- Latest Upgrade 4 verification result: `comparison_status_distribution=No Major Change:123`
+- Latest Upgrade 4 run summary: `improved_count=0`, `worsened_count=0`, `no_change_count=14`, `not_enough_history=0`
+- Latest Upgrade 4 local outputs: `flipkart_run_comparison.csv`, `flipkart_fsn_run_comparison.csv`, `looker_flipkart_run_comparison.csv`
+- Latest Upgrade 4 log: `data/logs/marketplaces/flipkart/flipkart_run_comparison_log.csv`
 
 ## Next Phase
-Upgrade 3 - Looker Studio Dashboard Foundation
+Pending user direction
 
 ## Current Focus
-Flipkart v1 is complete and production-safe. The v2 upgrade track is now on Looker Studio source-tab foundations only.
+Flipkart v1 is complete and production-safe. Upgrade 4 run comparison is built and verified, so the v2 upgrade track is waiting on the next user-directed slice.
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -143,6 +154,10 @@ Flipkart v1 is complete and production-safe. The v2 upgrade track is now on Look
 - Latest Stage 6 COGS result: `FLIPKART_COST_MASTER exists`, `FLIPKART_SKU_ANALYSIS now has COGS profit columns`
 - Latest Stage 6 COGS result: `rows read=123`, `rows written=123`, `missing_cost_rows=63`, `missing_cogs_rows=63`
 - Latest Stage 6 COGS result: `cogs_entered_fsns=60`, `cogs_missing_fsns=63`, `cogs_completion_percent=48.78`
+- Latest Upgrade 4 result: `latest_run_id=FLIPKART_20260429_181349`, `previous_run_id=FLIPKART_20260429_124238`, `run_comparison_rows=22`, `fsn_comparison_rows=123`
+- Latest Upgrade 4 result: `run_status_distribution=No Change:14, New:8`, `comparison_status_distribution=No Major Change:123`
+- Latest Upgrade 4 verification: `status=PASS`, `blank_fsn_count=0`, `not_enough_history=0`
+- Latest Upgrade 4 tabs created/updated: `FLIPKART_RUN_COMPARISON`, `FLIPKART_FSN_RUN_COMPARISON`, `LOOKER_FLIPKART_RUN_COMPARISON`
 - Current production features:
   - one-command PowerShell wrapper works
   - Python runner remains the underlying execution path
@@ -331,7 +346,20 @@ Flipkart v1 is complete and production-safe. The v2 upgrade track is now on Look
 - Do not touch other marketplaces
 - Do not wipe manual tabs
 - Keep the source layer clean and Looker-friendly
-- Upgrade 3 status: `src/marketplaces/flipkart/create_looker_studio_sources.py` and `src/marketplaces/flipkart/verify_looker_studio_sources.py` added; live sheet run passed; verifier returned `PASS`
+- Upgrade 3 status: complete and committed
+- Upgrade 3 commit: `c5699b4 - Add Looker Studio source tabs for Flipkart dashboard`
+
+- Upgrade 4: Run Comparison
+- Goal: compare latest Flipkart run versus previous run so the team can see what improved, worsened, resolved, or newly appeared
+- Scope: comparison/output tabs only
+- Use `FLIPKART_RUN_HISTORY`, `FLIPKART_FSN_HISTORY`, `FLIPKART_SKU_ANALYSIS`, `FLIPKART_ALERTS_GENERATED`, and `FLIPKART_ACTIVE_TASKS`
+- Do not run the full Flipkart pipeline
+- Do not change core calculations
+- Do not change normalized parsers
+- Do not touch `MASTER_SKU`
+- Do not touch other marketplaces
+- Do not wipe manual tabs
+- Keep comparison outputs separate from analysis calculations
 
 ### V2 Guardrails
 - Keep Flipkart v1 untouched
@@ -345,6 +373,7 @@ Flipkart v1 is complete and production-safe. The v2 upgrade track is now on Look
 - Build only one upgrade at a time
 - Build Upgrade 2 as a storage/archive sync only, not a recalculation layer
 - Build Upgrade 3 as a source-tab foundation only, not a recalculation layer
+- Build Upgrade 4 as a comparison layer only, not a recalculation layer
 
 ### Working Rules
 - `FSN` remains the primary key, primary filter, and primary join key

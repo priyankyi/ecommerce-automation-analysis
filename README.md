@@ -185,6 +185,12 @@ python -m src.marketplaces.flipkart.create_looker_studio_sources
 python -m src.marketplaces.flipkart.verify_looker_studio_sources
 ```
 
+Flipkart run comparison:
+```powershell
+python -m src.marketplaces.flipkart.create_flipkart_run_comparison
+python -m src.marketplaces.flipkart.verify_flipkart_run_comparison
+```
+
 Looker Studio connection guide:
 1. Open Looker Studio
 2. Create blank report
