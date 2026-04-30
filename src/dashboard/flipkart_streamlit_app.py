@@ -562,6 +562,7 @@ def display_status_strip(data: Dict[str, Any]) -> None:
     loaded_tabs = len(SOURCE_TABS) - len(data.get("missing_tabs", []))
     status_bits = [
         f"Auth mode: `{data.get('auth_mode', 'Local')}`",
+        f"Spreadsheet ID source: `{data.get('spreadsheet_id_source', '-')}`",
         f"Spreadsheet connected: `{'Yes' if data.get('spreadsheet_connected') else 'No'}`",
         f"Last load: `{data.get('last_data_load_timestamp', '-')}`",
         f"Tabs loaded: `{loaded_tabs}/{len(SOURCE_TABS)}`",
@@ -1656,6 +1657,7 @@ def render_sidebar(data: Dict[str, Any], default_page: str) -> tuple[str, Dict[s
         st.rerun()
     st.sidebar.markdown("### Deployment Status")
     st.sidebar.write(f"Auth mode: {data.get('auth_mode', 'Local')}")
+    st.sidebar.write(f"Spreadsheet ID source: {data.get('spreadsheet_id_source', '-')}")
     st.sidebar.write(f"Spreadsheet connected: {'Yes' if data.get('spreadsheet_connected') else 'No'}")
     st.sidebar.write(f"Last data load: {data.get('last_data_load_timestamp', '-')}")
     if data.get("load_message"):
@@ -1904,6 +1906,9 @@ def run_app() -> None:
     page, search_filters = render_sidebar(data, PAGE_ORDER[0])
     display_status_strip(data)
     load_status = normalize_text(data.get("load_status")).lower()
+    if load_status == "missing_spreadsheet_id":
+        st.error("MASTER_SPREADSHEET_ID is missing. Add it in Streamlit Cloud Secrets.")
+        st.stop()
     if load_status == "missing_secrets":
         st.error(
             "Streamlit Cloud is missing Google Sheets secrets. Add MASTER_SPREADSHEET_ID and the "

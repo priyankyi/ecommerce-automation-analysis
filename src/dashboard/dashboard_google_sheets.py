@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, Sequence
 
@@ -15,7 +16,6 @@ from src.marketplaces.flipkart.flipkart_sheet_helpers import load_json
 
 PROJECT_ROOT = project_root()
 SPREADSHEET_META_PATH = PROJECT_ROOT / "data" / "output" / "master_sku_sheet.json"
-DEFAULT_MASTER_SPREADSHEET_ID = "1E9xtLqrMtaio5O0jA0ypx6fsAV2ufKb121G3q8qB_Cg"
 READONLY_SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
     "https://www.googleapis.com/auth/drive.readonly",
@@ -61,14 +61,20 @@ def _normalize_secret_info(secret_value: Any) -> Dict[str, Any] | None:
     return None
 
 
-def resolve_spreadsheet_id() -> str:
+def resolve_spreadsheet_id() -> tuple[str, str]:
     secrets = _safe_secrets()
     secret_spreadsheet_id = str(secrets.get(SPREADSHEET_ID_SECRET_KEY, "")).strip()
     if secret_spreadsheet_id:
-        return secret_spreadsheet_id
+        return secret_spreadsheet_id, "Streamlit Secrets"
+
+    env_spreadsheet_id = os.environ.get(SPREADSHEET_ID_SECRET_KEY, "").strip()
+    if env_spreadsheet_id:
+        return env_spreadsheet_id, "ENV"
+
     if SPREADSHEET_META_PATH.exists():
-        return load_json(SPREADSHEET_META_PATH)["spreadsheet_id"]
-    return DEFAULT_MASTER_SPREADSHEET_ID
+        return str(load_json(SPREADSHEET_META_PATH)["spreadsheet_id"]).strip(), "Local JSON"
+
+    raise FileNotFoundError("MASTER_SPREADSHEET_ID is missing. Add it in Streamlit Cloud Secrets.")
 
 
 def build_dashboard_services() -> tuple[object, str]:
@@ -131,6 +137,7 @@ def load_dashboard_payload() -> Dict[str, Any]:
     service_account_info = _normalize_secret_info(secrets.get(SERVICE_ACCOUNT_SECRET_KEY))
     payload: Dict[str, Any] = {
         "spreadsheet_id": "",
+        "spreadsheet_id_source": "",
         "auth_mode": "Local",
         "spreadsheet_connected": False,
         "last_data_load_timestamp": load_timestamp,
@@ -143,7 +150,14 @@ def load_dashboard_payload() -> Dict[str, Any]:
     }
 
     try:
-        spreadsheet_id = resolve_spreadsheet_id()
+        spreadsheet_id, spreadsheet_id_source = resolve_spreadsheet_id()
+    except FileNotFoundError as exc:
+        return {
+            **payload,
+            "spreadsheet_id_source": "",
+            "load_status": "missing_spreadsheet_id",
+            "load_message": str(exc),
+        }
     except Exception as exc:
         return {
             **payload,
@@ -157,6 +171,7 @@ def load_dashboard_payload() -> Dict[str, Any]:
         return {
             **payload,
             "spreadsheet_id": spreadsheet_id,
+            "spreadsheet_id_source": spreadsheet_id_source,
             "auth_mode": "Streamlit Secrets" if service_account_info else "Local",
             "load_status": "missing_secrets",
             "load_message": (
@@ -170,6 +185,7 @@ def load_dashboard_payload() -> Dict[str, Any]:
         return {
             **payload,
             "spreadsheet_id": spreadsheet_id,
+            "spreadsheet_id_source": spreadsheet_id_source,
             "auth_mode": "Streamlit Secrets" if service_account_info else "Local",
             "load_status": "auth_error",
             "load_message": f"Unable to initialize Google Sheets access. {exc.__class__.__name__}: {exc}",
@@ -211,6 +227,7 @@ def load_dashboard_payload() -> Dict[str, Any]:
         return {
             **payload,
             "spreadsheet_id": spreadsheet_id,
+            "spreadsheet_id_source": spreadsheet_id_source,
             "auth_mode": auth_mode,
             "spreadsheet_connected": True,
             "load_status": "ok",
@@ -226,6 +243,7 @@ def load_dashboard_payload() -> Dict[str, Any]:
             return {
                 **payload,
                 "spreadsheet_id": spreadsheet_id,
+                "spreadsheet_id_source": spreadsheet_id_source,
                 "auth_mode": auth_mode,
                 "load_status": "quota_limited",
                 "load_message": "Google Sheets quota limit reached. Wait 5 minutes and refresh the dashboard.",
@@ -233,6 +251,7 @@ def load_dashboard_payload() -> Dict[str, Any]:
         return {
             **payload,
             "spreadsheet_id": spreadsheet_id,
+            "spreadsheet_id_source": spreadsheet_id_source,
             "auth_mode": auth_mode,
             "load_status": "sheet_error",
             "load_message": f"Unable to read Google Sheets. {exc.__class__.__name__}: {exc}",
@@ -241,6 +260,7 @@ def load_dashboard_payload() -> Dict[str, Any]:
         return {
             **payload,
             "spreadsheet_id": spreadsheet_id,
+            "spreadsheet_id_source": spreadsheet_id_source,
             "auth_mode": auth_mode,
             "load_status": "sheet_error",
             "load_message": f"Unable to load dashboard data. {exc.__class__.__name__}: {exc}",
