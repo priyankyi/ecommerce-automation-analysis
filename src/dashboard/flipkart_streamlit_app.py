@@ -1659,6 +1659,10 @@ def render_sidebar(data: Dict[str, Any], default_page: str) -> tuple[str, Dict[s
     st.sidebar.write(f"Auth mode: {data.get('auth_mode', 'Local')}")
     st.sidebar.write(f"Spreadsheet ID source: {data.get('spreadsheet_id_source', '-')}")
     st.sidebar.write(f"Spreadsheet connected: {'Yes' if data.get('spreadsheet_connected') else 'No'}")
+    st.sidebar.write(f"Streamlit secrets available: {'Yes' if data.get('streamlit_secrets_available') else 'No'}")
+    st.sidebar.write(f"gcp_service_account block found: {'Yes' if data.get('gcp_service_account_found') else 'No'}")
+    st.sidebar.write(f"service account email: {data.get('service_account_email') or '-'}")
+    st.sidebar.write(f"private_key present: {'Yes' if data.get('private_key_present') else 'No'}")
     st.sidebar.write(f"Last data load: {data.get('last_data_load_timestamp', '-')}")
     if data.get("load_message"):
         st.sidebar.caption(data["load_message"])
@@ -1909,13 +1913,13 @@ def run_app() -> None:
     if load_status == "missing_spreadsheet_id":
         st.error("MASTER_SPREADSHEET_ID is missing. Add it in Streamlit Cloud Secrets.")
         st.stop()
-    if load_status == "missing_secrets":
-        st.error(
-            "Streamlit Cloud is missing Google Sheets secrets. Add MASTER_SPREADSHEET_ID and the "
-            "gcp_service_account block in Advanced settings, then redeploy."
-        )
+    if load_status == "auth_error":
+        if data.get("gcp_service_account_found"):
+            st.error("Service account secrets found but Google auth failed. Check private_key formatting and Google Sheet sharing.")
+        else:
+            st.error("gcp_service_account block not found in Streamlit Secrets.")
         st.stop()
-    if load_status in {"auth_error", "sheet_error"}:
+    if load_status in {"missing_secrets", "sheet_error"}:
         st.error(data.get("load_message") or "Unable to load dashboard data.")
         st.stop()
     if load_status == "quota_limited":
