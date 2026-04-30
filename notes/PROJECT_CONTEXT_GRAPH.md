@@ -164,22 +164,33 @@ Phase 24 - Streamlit Dashboard Expansion
 - Latest Upgrade 5 result: `fsns_with_adjustments=0`, `net_adjustment=0`
 - Latest Upgrade 5 verification result: `status=PASS`
 
-## Next Phase
-Phase 25 - Streamlit Dashboard QA and Polish
+## Phase 26 - Streamlit Cloud Deployment Readiness
 
-- Visually inspect every Streamlit page and fix page-specific UI/table issues
-- Improve `Returns Intelligence` and `FSN Deep Dive` first
-- Keep the dashboard read-only against Google Sheets sources, with downloads/export only where useful
-- Do not rerun the full Flipkart pipeline as part of dashboard QA
+### Added
+- `src/dashboard/dashboard_google_sheets.py` added as the read-only dashboard Google Sheets helper
+- `src/auth_google.py` now supports service-account credentials for dashboard use while preserving the local OAuth flow
+- `src/dashboard/flipkart_streamlit_app.py` now surfaces `Auth mode`, `Spreadsheet connected`, and `Last data load timestamp` in the sidebar
+- Dashboard load handling now shows a clear setup message when Streamlit Cloud secrets are missing and a quota warning for Google Sheets 429 responses
+- `.streamlit/config.toml` added for hosted Streamlit defaults
+- `config/streamlit_secrets_template.toml` added as the secrets template
+- `docs/STREAMLIT_CLOUD_DEPLOYMENT.md` added as the noob-friendly deployment guide
+- `README.md` now includes a Hosted Dashboard section
+
+### Validation
+- `python -m py_compile src/dashboard/flipkart_streamlit_app.py src/dashboard/dashboard_google_sheets.py`
+- Dashboard remains read-only, does not run the full Flipkart pipeline, does not call Google Ads API, does not call SerpApi / Google Lens, does not touch `MASTER_SKU`, does not touch other marketplaces, and does not expose credentials
 
 ## Current Focus
 Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, Upgrade 8 module-wise data confidence is complete and verified, Upgrade 9 Google Keyword Planner integration is fallback-safe, and Upgrade 10 live visual competitor search is verified.
 - Streamlit is now the primary dashboard path for daily operations; Looker Studio is optional and secondary
+- Streamlit Community Cloud is the primary hosting option so the dashboard works even when the local PC is switched off
 - Streamlit dashboard app exists at `src/dashboard/flipkart_streamlit_app.py`
 - Streamlit wrapper exists at `run_flipkart_dashboard.ps1`
 - Wrapper launch command is `python -m streamlit run src/dashboard/flipkart_streamlit_app.py`
 - Dashboard pages in scope: `Executive Overview`, `Alerts & Actions`, `Profit & COGS`, `Ads Planner`, `Competitor Risk`, `Data Quality`, `Returns Intelligence`, `Return Comments Explorer`, `FSN Deep Dive`, `Listing Issues`, `Run History & Comparison`, and `Raw Data Explorer / Downloads`
 - Dashboard is read-only against Google Sheets generated/source tabs and never writes back from Streamlit
+- Dashboard reads dashboard source tabs only and must not depend on local credentials/ folders in hosted mode
+- App must support Streamlit Cloud secrets while still working locally
 - Keep warnings visible for Google Keyword Planner Basic Access pending, `GOOGLE_KEYWORD_METRICS_CACHE` rows pending, and incomplete competitor rows caused by missing image URLs
 - Chrome DevTools / Looker Studio UI automation is rejected for dashboard work because it is slow, token-heavy, and fragile
 - Upgrade 10 live result: `SerpApi visual search calls used this month=8`, `safe remaining calls=192`, `visual_result_rows=51`, `flipkart_only_url_violations=0`
@@ -212,6 +223,7 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Accepted warnings remain non-business failures: keyword cache pending while Google Ads Basic Access is pending, competitor `Not Enough Data` while image URLs are still missing, and Google Sheets quota warnings when they clear on rerun
 - Streamlit Dashboard Expansion Phase is complete and verified
 - Streamlit Dashboard Expansion Phase rules were satisfied: read from Google Sheets and existing generated tabs only, do not run the full Flipkart pipeline, do not call Google Ads API, do not call SerpApi or Google Lens, do not touch `MASTER_SKU`, do not touch other marketplaces, do not expose credentials, do not modify Google Sheets manually from Streamlit, and keep the dashboard read-only except for useful downloads/export buttons
+- Streamlit Cloud Deployment Readiness is complete and verified
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -246,7 +258,7 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Upgrade 5 result: `FLIPKART_ADJUSTMENTS_LEDGER created`
 - Upgrade 5 result: `ledger_rows=0`, `valid_adjustment_rows=0`, `FLIPKART_ADJUSTED_PROFIT rows=492`, `LOOKER_FLIPKART_ADJUSTED_PROFIT rows=492`
 - Upgrade 5 result: `fsns_with_adjustments=0`, `net_adjustment=0`, `verification status=PASS`
-- Next stage starting: `Phase 25 - Streamlit Dashboard QA and Polish`
+- Phase 26 - Streamlit Cloud Deployment Readiness is complete and verified
 - Streamlit dashboard deliverables: the 12-page operating UI, return-intelligence views, useful filters, color-coded risk/status, clear incomplete-data warnings, and safe download/export actions
 - Current production features:
   - one-command PowerShell wrapper works
@@ -339,21 +351,20 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Latest Stage 10 control fix: manual-tab preservation check now matches the live tracker tab shape and returns `true`
 
 ### Next Task
-- Create the final team SOP document for Flipkart daily usage
-- Add one-command PowerShell wrappers for team-safe refresh paths
-- Define the monthly raw report replacement process
-- Define the daily/quick refresh process
-- Add the Looker Studio setup guide
-- Add the troubleshooting guide
-- Document which tabs the team should use
-- Document which tabs the team should not touch
-- Do not run the full Flipkart pipeline
-- Do not call Google Ads API
-- Do not call SerpApi or Google Lens
-- Do not touch `MASTER_SKU`
-- Do not touch other marketplaces
+- Add cloud-safe Google auth support using Streamlit secrets
+- Keep local auth fallback so the app still works on the local PC
+- Add Streamlit Community Cloud deployment docs
+- Add `.streamlit/config.toml` only if needed for hosted light-theme behavior
+- Add a dashboard health check suitable for hosted deployment
 - Do not expose credentials
 - Do not commit credentials
+- Do not depend on local `credentials/` files in hosted mode
+- Do not run the full Flipkart pipeline
+- Do not call Google Ads API
+- Do not call SerpApi
+- Do not touch `MASTER_SKU`
+- Do not touch other marketplaces
+- Keep the app read-only
 
 ### Rules
 - `FSN` is the primary key, primary filter, and primary join key

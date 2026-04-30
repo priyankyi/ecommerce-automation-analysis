@@ -22,6 +22,21 @@ Use full safe refresh only after replacing monthly raw reports.
 Use health check if unsure.
 Do not run paid/API external calls unless intentionally doing keyword or visual search.
 
+## Hosted Dashboard
+
+- Local launch:
+  - `.\run_flipkart_dashboard.ps1`
+- Cloud launch:
+  - Streamlit Community Cloud URL after deployment
+- Data refresh:
+  - Run the normal local pipeline or quick refresh locally.
+  - Updated rows land in Google Sheets.
+  - The cloud dashboard reads the updated tabs automatically.
+- Read-only rule:
+  - The hosted dashboard is read-only and does not write back to Google Sheets.
+- Service account:
+  - Share the Google Sheet with `streamlit-flipkart-dashboard@dn-data-487114.iam.gserviceaccount.com`.
+
 Source:
 - https://chatgpt.com/share/69f04e97-13b4-83a5-b2a6-cdf42730e47d
 

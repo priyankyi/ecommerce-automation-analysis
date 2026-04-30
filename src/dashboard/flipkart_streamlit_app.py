@@ -9,17 +9,13 @@ from typing import Any, Dict, List, Sequence
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from googleapiclient.errors import HttpError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.auth_google import build_services
-from src.marketplaces.flipkart.flipkart_sheet_helpers import load_json
+from src.dashboard.dashboard_google_sheets import load_dashboard_payload as load_dashboard_payload_from_sheet
 from src.marketplaces.flipkart.flipkart_utils import clean_fsn, normalize_key, normalize_text, parse_float
-
-SPREADSHEET_META_PATH = PROJECT_ROOT / "data" / "output" / "master_sku_sheet.json"
 
 SOURCE_TABS = [
     "LOOKER_FLIPKART_EXECUTIVE_SUMMARY",
@@ -169,21 +165,6 @@ COMPARISON_PALETTE = {
     "no change": "#e2e8f0",
     "new": "#dbeafe",
 }
-
-
-def retry(func, attempts: int = 4):
-    delay = 1.0
-    for attempt in range(1, attempts + 1):
-        try:
-            return func()
-        except HttpError as exc:
-            status = getattr(exc.resp, "status", None)
-            if status not in {429, 500, 502, 503} or attempt == attempts:
-                raise
-            import time
-
-            time.sleep(delay)
-            delay *= 2
 
 
 def values_to_dataframe(values: Sequence[Sequence[Any]]) -> pd.DataFrame:
@@ -382,54 +363,8 @@ def style_status_value(value: Any) -> str:
     return style_cell_value(value, GREY_PALETTE)
 
 
-@st.cache_resource(show_spinner=False)
-def get_services() -> tuple[object, object]:
-    return build_services()[:2]
-
-
-@st.cache_data(ttl=300, show_spinner=False)
 def load_dashboard_payload() -> Dict[str, Any]:
-    if not SPREADSHEET_META_PATH.exists():
-        raise FileNotFoundError(f"Missing required file: {SPREADSHEET_META_PATH}")
-
-    spreadsheet_id = load_json(SPREADSHEET_META_PATH)["spreadsheet_id"]
-    sheets_service, _ = get_services()
-    metadata = retry(
-        lambda: sheets_service.spreadsheets()
-        .get(spreadsheetId=spreadsheet_id, fields="sheets(properties(title))")
-        .execute()
-    )
-
-    available_tabs = {
-        sheet.get("properties", {}).get("title", "")
-        for sheet in metadata.get("sheets", [])
-        if sheet.get("properties", {}).get("title")
-    }
-    ranges = [f"{tab}!A1:ZZ" for tab in SOURCE_TABS if tab in available_tabs]
-    values_map: Dict[str, Sequence[Sequence[Any]]] = {}
-    if ranges:
-        batch = retry(
-            lambda: sheets_service.spreadsheets()
-            .values()
-            .batchGet(spreadsheetId=spreadsheet_id, ranges=ranges)
-            .execute()
-        )
-        for value_range in batch.get("valueRanges", []):
-            range_name = value_range.get("range", "")
-            tab_name = range_name.split("!", 1)[0]
-            values_map[tab_name] = value_range.get("values", [])
-
-    frames = {tab_name: values_to_dataframe(values_map.get(tab_name, [])) for tab_name in SOURCE_TABS}
-    missing_tabs = [tab_name for tab_name in SOURCE_TABS if tab_name not in available_tabs]
-    row_counts = {tab_name: len(df) for tab_name, df in frames.items()}
-
-    return {
-        "spreadsheet_id": spreadsheet_id,
-        "available_tabs": sorted(available_tabs),
-        "missing_tabs": missing_tabs,
-        "frames": frames,
-        "row_counts": row_counts,
-    }
+    return load_dashboard_payload_from_sheet()
 
 
 def build_fsn_index(df: pd.DataFrame) -> pd.DataFrame:
@@ -624,11 +559,16 @@ def render_warning_banner(message: str) -> None:
 
 
 def display_status_strip(data: Dict[str, Any]) -> None:
+    loaded_tabs = len(SOURCE_TABS) - len(data.get("missing_tabs", []))
     status_bits = [
-        f"Spreadsheet: `{data['spreadsheet_id']}`",
-        f"Tabs loaded: `{len(SOURCE_TABS) - len(data['missing_tabs'])}/{len(SOURCE_TABS)}`",
+        f"Auth mode: `{data.get('auth_mode', 'Local')}`",
+        f"Spreadsheet connected: `{'Yes' if data.get('spreadsheet_connected') else 'No'}`",
+        f"Last load: `{data.get('last_data_load_timestamp', '-')}`",
+        f"Tabs loaded: `{loaded_tabs}/{len(SOURCE_TABS)}`",
     ]
-    if data["missing_tabs"]:
+    if data.get("spreadsheet_id"):
+        status_bits.insert(0, f"Spreadsheet: `{data['spreadsheet_id']}`")
+    if data.get("missing_tabs"):
         status_bits.append(f"Missing: `{', '.join(data['missing_tabs'])}`")
     st.caption(" | ".join(status_bits))
 
@@ -1712,8 +1652,14 @@ def render_sidebar(data: Dict[str, Any], default_page: str) -> tuple[str, Dict[s
     st.sidebar.title("Flipkart Control Tower")
     st.sidebar.caption("Read-only Streamlit dashboard over the current Google Sheet source tabs.")
     if st.sidebar.button("Refresh data cache", use_container_width=True):
-        load_dashboard_payload.clear()
+        load_dashboard_payload_from_sheet.clear()
         st.rerun()
+    st.sidebar.markdown("### Deployment Status")
+    st.sidebar.write(f"Auth mode: {data.get('auth_mode', 'Local')}")
+    st.sidebar.write(f"Spreadsheet connected: {'Yes' if data.get('spreadsheet_connected') else 'No'}")
+    st.sidebar.write(f"Last data load: {data.get('last_data_load_timestamp', '-')}")
+    if data.get("load_message"):
+        st.sidebar.caption(data["load_message"])
     page = st.sidebar.selectbox("Page", PAGE_ORDER, index=PAGE_ORDER.index(default_page))
     fsn_search = st.sidebar.text_input("FSN search", value="", placeholder="Type an FSN")
     sku_search = st.sidebar.text_input("SKU search", value="", placeholder="Type a SKU")
@@ -1948,16 +1894,6 @@ def run_app() -> None:
     inject_css()
     try:
         data = load_dashboard_payload()
-    except HttpError as exc:
-        status = getattr(exc.resp, "status", None)
-        if status == 429:
-            st.error("Google Sheets quota limit. Wait 5 minutes and refresh.")
-        else:
-            st.error(
-                "Unable to load the Flipkart Google Sheet. "
-                f"{exc.__class__.__name__}: {exc}"
-            )
-        st.stop()
     except Exception as exc:
         st.error(
             "Unable to load the Flipkart Google Sheet. "
@@ -1967,6 +1903,18 @@ def run_app() -> None:
 
     page, search_filters = render_sidebar(data, PAGE_ORDER[0])
     display_status_strip(data)
+    load_status = normalize_text(data.get("load_status")).lower()
+    if load_status == "missing_secrets":
+        st.error(
+            "Streamlit Cloud is missing Google Sheets secrets. Add MASTER_SPREADSHEET_ID and the "
+            "gcp_service_account block in Advanced settings, then redeploy."
+        )
+        st.stop()
+    if load_status in {"auth_error", "sheet_error"}:
+        st.error(data.get("load_message") or "Unable to load dashboard data.")
+        st.stop()
+    if load_status == "quota_limited":
+        st.warning(data.get("load_message") or "Google Sheets quota limit reached. Wait 5 minutes and refresh.")
     render_global_notices(data)
     frames = data["frames"]
     metrics, metric_lookup = build_overview_metrics(frames)

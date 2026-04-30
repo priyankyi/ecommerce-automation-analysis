@@ -6,6 +6,7 @@ from typing import Iterable, Tuple
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
@@ -27,7 +28,11 @@ def load_credentials(
     credentials_path: Path | None = None,
     token_path: Path | None = None,
     scopes: Iterable[str] = SCOPES,
+    service_account_info: dict[str, object] | None = None,
 ) -> Credentials:
+    if service_account_info:
+        return ServiceAccountCredentials.from_service_account_info(service_account_info, scopes=list(scopes))
+
     root = project_root()
     credentials_path = credentials_path or root / "credentials" / "credentials.json"
     token_path = token_path or root / "credentials" / "token.json"
@@ -59,13 +64,32 @@ def load_credentials(
     return creds
 
 
+def load_service_account_credentials(
+    service_account_info: dict[str, object],
+    scopes: Iterable[str] = SCOPES,
+) -> ServiceAccountCredentials:
+    return ServiceAccountCredentials.from_service_account_info(service_account_info, scopes=list(scopes))
+
+
+def build_services_from_credentials(creds: Credentials) -> Tuple[object, object]:
+    sheets_service = build("sheets", "v4", credentials=creds, cache_discovery=False, static_discovery=False)
+    drive_service = build("drive", "v3", credentials=creds, cache_discovery=False, static_discovery=False)
+    return sheets_service, drive_service
+
+
 def build_services(
     credentials_path: Path | None = None,
     token_path: Path | None = None,
+    scopes: Iterable[str] = SCOPES,
+    service_account_info: dict[str, object] | None = None,
 ) -> Tuple[object, object, Credentials]:
-    creds = load_credentials(credentials_path=credentials_path, token_path=token_path)
-    sheets_service = build("sheets", "v4", credentials=creds, cache_discovery=False, static_discovery=False)
-    drive_service = build("drive", "v3", credentials=creds, cache_discovery=False, static_discovery=False)
+    creds = load_credentials(
+        credentials_path=credentials_path,
+        token_path=token_path,
+        scopes=scopes,
+        service_account_info=service_account_info,
+    )
+    sheets_service, drive_service = build_services_from_credentials(creds)
     return sheets_service, drive_service, creds
 
 
