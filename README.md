@@ -1,5 +1,23 @@
 # Ecommerce Automation Analysis
 
+## Flipkart Control Tower - Team Commands
+
+Use these first for normal team work:
+
+```powershell
+.\run_flipkart_quick_refresh.ps1
+.\run_flipkart_health_check.ps1
+.\run_flipkart_cogs_refresh.ps1
+.\run_flipkart_actions_refresh.ps1
+.\run_flipkart_competitor_refresh.ps1
+.\run_flipkart_full_safe_refresh.ps1
+```
+
+Use quick refresh normally.
+Use full safe refresh only after replacing monthly raw reports.
+Use health check if unsure.
+Do not run paid/API external calls unless intentionally doing keyword or visual search.
+
 Source:
 - https://chatgpt.com/share/69f04e97-13b4-83a5-b2a6-cdf42730e47d
 

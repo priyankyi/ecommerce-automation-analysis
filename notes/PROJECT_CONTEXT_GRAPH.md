@@ -147,7 +147,7 @@ Phase 23 - Flipkart Adjustment Ledger
 - Latest Upgrade 5 verification result: `status=PASS`
 
 ## Next Phase
-Integration Phase - Wire Upgrades 5-10 into the operating refresh flow and Looker source layer
+Final Team SOP Phase - Make the Flipkart Control Tower noob-friendly for daily team usage
 
 ## Current Focus
 Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, Upgrade 8 module-wise data confidence is complete and verified, Upgrade 9 Google Keyword Planner integration is fallback-safe, and Upgrade 10 live visual competitor search is verified.
@@ -176,12 +176,20 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Upgrade 9 verification result: `verify_google_keyword_metrics_cache status=PASS_WITH_WARNINGS`, warning=`CACHE_EMPTY`
 - Upgrade 10 quota guard now uses a local usage ledger at `data/logs/marketplaces/flipkart/visual_search_usage_log.csv`
 - Upgrade 10 must start with Scale Ads + Test Ads FSNs only
-- Integration Phase scope: wire Upgrades 5-10 into the operating refresh flow and Looker source layer
-- Integration Phase rules: do not run the full Flipkart pipeline, do not call Google Ads API by default, do not call SerpApi or Google Lens by default, do not touch `MASTER_SKU`, do not touch other marketplaces, do not auto-change prices, do not auto-change ad budgets, do not wipe manual tabs, and only rebuild generated output tabs
-- Integration Phase rules: external API refreshes stay manual and on-demand only
+- Fast refresh modes are now validated: `quick`, `looker-only`, `competitor-only`, `cogs-only`, `actions-only`, `health-only`, and `full`
+- Latest accepted refresh result: `failed_step=null`, `verification_passed=true`, `external_google_ads_called=false`, `external_visual_search_called=false`, `manual_tabs_preserved=true`
+- Accepted warnings remain non-business failures: keyword cache pending while Google Ads Basic Access is pending, competitor `Not Enough Data` while image URLs are still missing, and Google Sheets quota warnings when they clear on rerun
+- Final Team SOP Phase scope: create the final team-facing SOP, one-command PowerShell wrappers, monthly raw report replacement process, daily/quick refresh process, Looker Studio setup guide, troubleshooting guide, and clear team tab-usage rules
+- Final Team SOP Phase rules: do not run the full Flipkart pipeline, do not call Google Ads API, do not call SerpApi or Google Lens, do not touch `MASTER_SKU`, do not touch other marketplaces, do not expose credentials, do not commit credentials, do not auto-change prices, do not auto-change ad budgets, and do not wipe manual tabs
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
+- Flipkart fast refresh modes are complete and verified for team-safe use
+- Latest validated modes: `quick`, `looker-only`, `competitor-only`, `cogs-only`, `actions-only`, `health-only`, `full`
+- Latest accepted runner result: `failed_step=null`, `verification_passed=true`, `external_google_ads_called=false`, `external_visual_search_called=false`, `manual_tabs_preserved=true`
+- Default team-safe refresh command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick`
+- Team-safe looker-only command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode looker-only`
+- Team-safe health-only command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode health-only`
 - Latest dashboard command: `python -m src.marketplaces.flipkart.create_flipkart_dashboard`
 - Latest successful dashboard run status: `SUCCESS`
 - Latest dashboard summary: `latest_run_id=FLIPKART_20260429_124238`, `total_alerts=327`, `critical_alerts=22`, `high_alerts=85`, `medium_alerts=181`, `low_alerts=39`, `active_tasks=327`
@@ -194,6 +202,8 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Upgrade 9 latest verified counts: `keyword_seed_rows=26`, `keyword_cache_rows=26`, `cache_status_distribution=Pending 26`
 - Upgrade 9 latest verified profile rows: `PRODUCT_TYPE_DEMAND_PROFILE rows=7`
 - Upgrade 9 latest verification statuses: `update_product_type_demand_profile=SUCCESS_WITH_WARNINGS`, `verify_google_keyword_metrics_cache=PASS_WITH_WARNINGS`
+- Upgrade 9 warning remains acceptable in team mode because keyword cache is still pending while Google Ads Basic Access is pending
+- Upgrade 10 warning remains acceptable in team mode because some remaining image URLs are missing and competitor rows can still show `Not Enough Data`
 - Latest Stage 6 COGS result: `FLIPKART_COST_MASTER exists`, `FLIPKART_SKU_ANALYSIS now has COGS profit columns`
 - Latest Stage 6 COGS result: `rows read=123`, `rows written=123`, `missing_cost_rows=63`, `missing_cogs_rows=63`
 - Latest Stage 6 COGS result: `cogs_entered_fsns=60`, `cogs_missing_fsns=63`, `cogs_completion_percent=48.78`
@@ -204,8 +214,8 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Upgrade 5 result: `FLIPKART_ADJUSTMENTS_LEDGER created`
 - Upgrade 5 result: `ledger_rows=0`, `valid_adjustment_rows=0`, `FLIPKART_ADJUSTED_PROFIT rows=492`, `LOOKER_FLIPKART_ADJUSTED_PROFIT rows=492`
 - Upgrade 5 result: `fsns_with_adjustments=0`, `net_adjustment=0`, `verification status=PASS`
-- Next stage starting: `Upgrade 6 - Report Format Drift Monitor`
-- Upgrade 6 rules: detect Flipkart raw report structure drift only, warning/output tabs only, no full pipeline, no normalized parser changes, no core calculation changes
+- Next stage starting: `Final Team SOP Phase`
+- Final Team SOP deliverables: team SOP document, one-command PowerShell wrappers, monthly raw report replacement process, daily/quick refresh process, Looker Studio setup guide, troubleshooting guide, team tabs to use, and team tabs not to touch
 - Current production features:
   - one-command PowerShell wrapper works
   - Python runner remains the underlying execution path
@@ -292,21 +302,21 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Latest Stage 10 control fix: manual-tab preservation check now matches the live tracker tab shape and returns `true`
 
 ### Next Task
-- Wire Upgrades 5-10 into the operating refresh flow and Looker source layer
-- Keep the competitor lookup optional and cached
-- Keep Google Keyword Planner cache-backed unless the user explicitly requests a live refresh
-- Keep visual search and Google Ads API refreshes manual and on-demand only
-- Keep URLs Flipkart-only and skip other marketplaces
-- Start with Scale Ads + Test Ads FSNs only
-- Enforce the safe monthly limit before any live visual-search calls
+- Create the final team SOP document for Flipkart daily usage
+- Add one-command PowerShell wrappers for team-safe refresh paths
+- Define the monthly raw report replacement process
+- Define the daily/quick refresh process
+- Add the Looker Studio setup guide
+- Add the troubleshooting guide
+- Document which tabs the team should use
+- Document which tabs the team should not touch
 - Do not run the full Flipkart pipeline
-- Do not scrape Flipkart aggressively
+- Do not call Google Ads API
+- Do not call SerpApi or Google Lens
 - Do not touch `MASTER_SKU`
 - Do not touch other marketplaces
-- Do not change core P&L calculations
-- Do not auto-change prices
-- Do not auto-change ads decisions without clear output
-- Keep the layer isolated from business logic and profit recalculation
+- Do not expose credentials
+- Do not commit credentials
 
 ### Rules
 - `FSN` is the primary key, primary filter, and primary join key
@@ -323,6 +333,11 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Do not push to Google Sheet again unless a later fix requires it
 - Push to Google Sheet only after audit passes
 - Keep backup and history changes separate from analysis calculations
+- Fast refresh modes must remain Flipkart-only and safe by default
+- Default team refresh must not call Google Ads API or SerpApi / Google Lens
+- Team-facing wrappers and SOPs must not expose or commit credentials
+- Keep Google Keyword Planner cache-backed unless a later explicitly approved live refresh is requested
+- Keep competitor refresh cache-first and do not run visual search unless explicitly requested
 - Keep Stage 2 as an operating layer only, not a recalculation layer
 - Keep the dashboard layer separate from analysis calculations
 - Current Stage 10 goal: create clean production commands and final verification for all Flipkart optional modules built after the core pipeline
