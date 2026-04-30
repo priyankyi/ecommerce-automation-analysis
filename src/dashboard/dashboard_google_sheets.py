@@ -16,6 +16,7 @@ from src.marketplaces.flipkart.flipkart_sheet_helpers import load_json
 
 PROJECT_ROOT = project_root()
 SPREADSHEET_META_PATH = PROJECT_ROOT / "data" / "output" / "master_sku_sheet.json"
+DEFAULT_MASTER_SPREADSHEET_ID = "1E9xtLqrMtaio5O0jA0ypx6fsAV2ufKb121G3q8qB_Cg"
 READONLY_SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
     "https://www.googleapis.com/auth/drive.readonly",
@@ -74,7 +75,7 @@ def resolve_spreadsheet_id() -> tuple[str, str]:
     if SPREADSHEET_META_PATH.exists():
         return str(load_json(SPREADSHEET_META_PATH)["spreadsheet_id"]).strip(), "Local JSON"
 
-    raise FileNotFoundError("MASTER_SPREADSHEET_ID is missing. Add it in Streamlit Cloud Secrets.")
+    return DEFAULT_MASTER_SPREADSHEET_ID, "Default"
 
 
 def build_dashboard_services() -> tuple[object, str]:
