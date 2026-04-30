@@ -1663,6 +1663,11 @@ def render_sidebar(data: Dict[str, Any], default_page: str) -> tuple[str, Dict[s
     st.sidebar.write(f"gcp_service_account block found: {'Yes' if data.get('gcp_service_account_found') else 'No'}")
     st.sidebar.write(f"service account email: {data.get('service_account_email') or '-'}")
     st.sidebar.write(f"private_key present: {'Yes' if data.get('private_key_present') else 'No'}")
+    st.sidebar.write(f"private_key starts with BEGIN: {'Yes' if data.get('private_key_starts_with_begin') else 'No'}")
+    st.sidebar.write(f"private_key ends with END: {'Yes' if data.get('private_key_ends_with_end') else 'No'}")
+    st.sidebar.write(f"auth error type: {data.get('auth_error_type') or '-'}")
+    st.sidebar.write(f"auth error message: {data.get('auth_error_message_safe') or '-'}")
+    st.sidebar.write(f"auth stage failed: {data.get('auth_stage_failed') or '-'}")
     st.sidebar.write(f"Last data load: {data.get('last_data_load_timestamp', '-')}")
     if data.get("load_message"):
         st.sidebar.caption(data["load_message"])
@@ -1915,7 +1920,7 @@ def run_app() -> None:
         st.stop()
     if load_status == "auth_error":
         if data.get("gcp_service_account_found"):
-            st.error("Service account secrets found but Google auth failed. Check private_key formatting and Google Sheet sharing.")
+            st.error(data.get("auth_error_message_safe") or "Service account secrets found but Google auth failed. Check private_key formatting and Google Sheet sharing.")
         else:
             st.error("gcp_service_account block not found in Streamlit Secrets.")
         st.stop()
