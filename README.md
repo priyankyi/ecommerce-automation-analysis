@@ -5,6 +5,7 @@
 Use these first for normal team work:
 
 ```powershell
+.\run_flipkart_dashboard.ps1
 .\run_flipkart_quick_refresh.ps1
 .\run_flipkart_health_check.ps1
 .\run_flipkart_cogs_refresh.ps1
@@ -12,6 +13,9 @@ Use these first for normal team work:
 .\run_flipkart_competitor_refresh.ps1
 .\run_flipkart_full_safe_refresh.ps1
 ```
+
+The Streamlit dashboard is now the primary daily dashboard.
+Looker Studio remains optional and reads the `LOOKER_*` tabs as a downstream source layer.
 
 Use quick refresh normally.
 Use full safe refresh only after replacing monthly raw reports.

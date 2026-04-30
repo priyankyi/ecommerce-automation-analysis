@@ -24,11 +24,25 @@
 21. Flipkart Ads Report Mapping
 22. Flipkart Run Comparison
 23. Flipkart Adjustment Ledger
+24. Streamlit Dashboard Expansion
 
 ## Latest Completed Phase
-Phase 23 - Flipkart Adjustment Ledger
+Phase 24 - Streamlit Dashboard Expansion
 
 ### Added
+- `src/dashboard/flipkart_streamlit_app.py` expanded into the primary Flipkart Control Tower dashboard
+- `run_flipkart_dashboard.ps1` is the one-command wrapper for launching Streamlit
+- `docs/STREAMLIT_DASHBOARD_SOP.md` added as the daily operating guide
+- `README.md` now points team commands at Streamlit first
+- Streamlit and Plotly dependencies are present in `requirements.txt`
+- Dashboard compiles successfully with `python -m py_compile src/dashboard/flipkart_streamlit_app.py`
+- Streamlit is now the primary Flipkart Control Tower dashboard
+- Looker Studio is optional / secondary and consumes the `LOOKER_*` source tabs
+- Chrome DevTools / Looker Studio UI automation is rejected for this phase because it is slow, token-heavy, and fragile
+- Dashboard pages added or expanded: `Executive Overview`, `Alerts & Actions`, `Profit & COGS`, `Ads Planner`, `Competitor Risk`, `Data Quality`, `Returns Intelligence`, `Return Comments Explorer`, `FSN Deep Dive`, `Listing Issues`, `Run History & Comparison`, and `Raw Data Explorer / Downloads`
+- Dashboard sources include the `LOOKER_*` tabs plus `FLIPKART_RETURN_COMMENTS`, `FLIPKART_RETURN_ISSUE_SUMMARY`, `FLIPKART_RETURN_REASON_PIVOT`, `FLIPKART_MISSING_ACTIVE_LISTINGS`, `FLIPKART_FSN_RUN_COMPARISON`, and `FLIPKART_VISUAL_COMPETITOR_RESULTS`
+- Dashboard behavior remains read-only and does not run the full Flipkart pipeline, call Google Ads API, call SerpApi / Google Lens, touch `MASTER_SKU`, touch other marketplaces, expose credentials, or write back to Google Sheets
+- Dashboard warning handling now includes missing-tab notices and Google Sheets quota limit messaging
 - `src/backup_google_sheet.py` added
 - `src/import_master_skus.py` added
 - `src/validate_phase15_pipeline.py` added
@@ -57,8 +71,12 @@ Phase 23 - Flipkart Adjustment Ledger
 - Verified foundation: Flipkart production runner, PowerShell wrapper, code backup, run archive, Google Sheet push, `FLIPKART_RUN_HISTORY`, `FLIPKART_FSN_HISTORY`, and Stage 2 alerts/tasks
 - `src/marketplaces/flipkart/create_flipkart_dashboard.py` added
 - `FLIPKART_DASHBOARD`, `FLIPKART_DASHBOARD_DATA`, `FLIPKART_TOP_ALERTS`, and `FLIPKART_ACTION_SUMMARY` support added
+- `src/dashboard/flipkart_streamlit_app.py` added
+- `run_flipkart_dashboard.ps1` added
 - Latest dashboard run: `status=SUCCESS`, `latest_run_id=FLIPKART_20260429_124238`, `total_alerts=327`, `critical_alerts=22`, `high_alerts=85`, `medium_alerts=181`, `low_alerts=39`, `active_tasks=327`
 - Latest dashboard log: `data/logs/marketplaces/flipkart/flipkart_dashboard_log.csv`
+- Streamlit dashboard launch path is working with `python -m streamlit run src/dashboard/flipkart_streamlit_app.py`
+- Streamlit timeout on launch is expected because the dashboard runs as a server process
 - `src/marketplaces/flipkart/create_flipkart_fsn_drilldown.py` added
 - `FLIPKART_FSN_DRILLDOWN` support added
 - Latest drilldown run: `status=SUCCESS`, `fsn_count=123`, `default_selected_fsn=OTLGPN5GHRDFW8MJ`
@@ -147,10 +165,23 @@ Phase 23 - Flipkart Adjustment Ledger
 - Latest Upgrade 5 verification result: `status=PASS`
 
 ## Next Phase
-Final Team SOP Phase - Make the Flipkart Control Tower noob-friendly for daily team usage
+Phase 25 - Streamlit Dashboard QA and Polish
+
+- Visually inspect every Streamlit page and fix page-specific UI/table issues
+- Improve `Returns Intelligence` and `FSN Deep Dive` first
+- Keep the dashboard read-only against Google Sheets sources, with downloads/export only where useful
+- Do not rerun the full Flipkart pipeline as part of dashboard QA
 
 ## Current Focus
 Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, Upgrade 8 module-wise data confidence is complete and verified, Upgrade 9 Google Keyword Planner integration is fallback-safe, and Upgrade 10 live visual competitor search is verified.
+- Streamlit is now the primary dashboard path for daily operations; Looker Studio is optional and secondary
+- Streamlit dashboard app exists at `src/dashboard/flipkart_streamlit_app.py`
+- Streamlit wrapper exists at `run_flipkart_dashboard.ps1`
+- Wrapper launch command is `python -m streamlit run src/dashboard/flipkart_streamlit_app.py`
+- Dashboard pages in scope: `Executive Overview`, `Alerts & Actions`, `Profit & COGS`, `Ads Planner`, `Competitor Risk`, `Data Quality`, `Returns Intelligence`, `Return Comments Explorer`, `FSN Deep Dive`, `Listing Issues`, `Run History & Comparison`, and `Raw Data Explorer / Downloads`
+- Dashboard is read-only against Google Sheets generated/source tabs and never writes back from Streamlit
+- Keep warnings visible for Google Keyword Planner Basic Access pending, `GOOGLE_KEYWORD_METRICS_CACHE` rows pending, and incomplete competitor rows caused by missing image URLs
+- Chrome DevTools / Looker Studio UI automation is rejected for dashboard work because it is slow, token-heavy, and fragile
 - Upgrade 10 live result: `SerpApi visual search calls used this month=8`, `safe remaining calls=192`, `visual_result_rows=51`, `flipkart_only_url_violations=0`
 - Upgrade 10 verification result: `competitor intelligence verification=PASS`
 - Upgrade 10 risk distribution: `Critical=2`, `Medium=4`, `Not Enough Data=11`
@@ -179,8 +210,8 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Fast refresh modes are now validated: `quick`, `looker-only`, `competitor-only`, `cogs-only`, `actions-only`, `health-only`, and `full`
 - Latest accepted refresh result: `failed_step=null`, `verification_passed=true`, `external_google_ads_called=false`, `external_visual_search_called=false`, `manual_tabs_preserved=true`
 - Accepted warnings remain non-business failures: keyword cache pending while Google Ads Basic Access is pending, competitor `Not Enough Data` while image URLs are still missing, and Google Sheets quota warnings when they clear on rerun
-- Final Team SOP Phase scope: create the final team-facing SOP, one-command PowerShell wrappers, monthly raw report replacement process, daily/quick refresh process, Looker Studio setup guide, troubleshooting guide, and clear team tab-usage rules
-- Final Team SOP Phase rules: do not run the full Flipkart pipeline, do not call Google Ads API, do not call SerpApi or Google Lens, do not touch `MASTER_SKU`, do not touch other marketplaces, do not expose credentials, do not commit credentials, do not auto-change prices, do not auto-change ad budgets, and do not wipe manual tabs
+- Streamlit Dashboard Expansion Phase is complete and verified
+- Streamlit Dashboard Expansion Phase rules were satisfied: read from Google Sheets and existing generated tabs only, do not run the full Flipkart pipeline, do not call Google Ads API, do not call SerpApi or Google Lens, do not touch `MASTER_SKU`, do not touch other marketplaces, do not expose credentials, do not modify Google Sheets manually from Streamlit, and keep the dashboard read-only except for useful downloads/export buttons
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -190,9 +221,10 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Default team-safe refresh command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick`
 - Team-safe looker-only command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode looker-only`
 - Team-safe health-only command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode health-only`
-- Latest dashboard command: `python -m src.marketplaces.flipkart.create_flipkart_dashboard`
+- Latest dashboard command: `.\run_flipkart_dashboard.ps1`
+- Latest dashboard launch path: `python -m streamlit run src/dashboard/flipkart_streamlit_app.py`
 - Latest successful dashboard run status: `SUCCESS`
-- Latest dashboard summary: `latest_run_id=FLIPKART_20260429_124238`, `total_alerts=327`, `critical_alerts=22`, `high_alerts=85`, `medium_alerts=181`, `low_alerts=39`, `active_tasks=327`
+- Latest dashboard summary: `dashboard pages compiled successfully`, `read-only source tabs only`, `download/export only`, `missing-tab warnings handled`, `quota warning handled`
 - Latest Stage 7B dashboard summary: `fsns_with_return_issue_summary=59`, `critical_return_issue_fsns=20`, `product_issue_fsns=26`, `logistics_issue_fsns=19`, `customer_rto_issue_fsns=5`
 - Latest Stage 7B dashboard summary: `return_fraud_risk_fsns=0`, `top_return_issue_category=Other`, `total_classified_return_comments=151`, `other_return_comments_count=270`
 - Flipkart API is not usable right now; Developer Access is pending and API tests returned HTTP 401
@@ -214,8 +246,8 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Upgrade 5 result: `FLIPKART_ADJUSTMENTS_LEDGER created`
 - Upgrade 5 result: `ledger_rows=0`, `valid_adjustment_rows=0`, `FLIPKART_ADJUSTED_PROFIT rows=492`, `LOOKER_FLIPKART_ADJUSTED_PROFIT rows=492`
 - Upgrade 5 result: `fsns_with_adjustments=0`, `net_adjustment=0`, `verification status=PASS`
-- Next stage starting: `Final Team SOP Phase`
-- Final Team SOP deliverables: team SOP document, one-command PowerShell wrappers, monthly raw report replacement process, daily/quick refresh process, Looker Studio setup guide, troubleshooting guide, team tabs to use, and team tabs not to touch
+- Next stage starting: `Phase 25 - Streamlit Dashboard QA and Polish`
+- Streamlit dashboard deliverables: the 12-page operating UI, return-intelligence views, useful filters, color-coded risk/status, clear incomplete-data warnings, and safe download/export actions
 - Current production features:
   - one-command PowerShell wrapper works
   - Python runner remains the underlying execution path
@@ -236,6 +268,11 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
   - FLIPKART_DASHBOARD_DATA rebuild support added
   - FLIPKART_TOP_ALERTS rebuild support added
   - FLIPKART_ACTION_SUMMARY rebuild support added
+  - Streamlit dashboard app is now the main operating UI for the team
+  - Streamlit pages should stay fast-loading, simple, and source-driven
+  - Streamlit should surface backend warnings clearly rather than hiding incomplete keyword-cache or competitor data states
+  - Streamlit expansion is complete and verified
+  - Streamlit remains read-only and does not write back to Google Sheets
 - Stage 5 cost master layer complete
 - Stage 6 COGS-aware alerts and dashboard complete
 - Stage 2 verifier added for read-only tab checks
