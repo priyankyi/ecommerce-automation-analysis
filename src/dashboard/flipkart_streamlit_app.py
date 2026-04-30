@@ -38,6 +38,7 @@ SOURCE_TABS = [
     "FLIPKART_MISSING_ACTIVE_LISTINGS",
     "FLIPKART_FSN_RUN_COMPARISON",
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
+    "FLIPKART_ORDER_ITEM_EXPLORER",
 ]
 
 EXECUTIVE_TAB = "LOOKER_FLIPKART_EXECUTIVE_SUMMARY"
@@ -60,6 +61,8 @@ RETURN_REASON_PIVOT_TAB = "FLIPKART_RETURN_REASON_PIVOT"
 MISSING_ACTIVE_LISTINGS_TAB = "FLIPKART_MISSING_ACTIVE_LISTINGS"
 FSN_RUN_COMPARISON_TAB = "FLIPKART_FSN_RUN_COMPARISON"
 VISUAL_COMPETITOR_RESULTS_TAB = "FLIPKART_VISUAL_COMPETITOR_RESULTS"
+ORDER_ITEM_EXPLORER_TAB = "FLIPKART_ORDER_ITEM_EXPLORER"
+LOOKER_ORDER_ITEM_EXPLORER_TAB = "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"
 
 PAGE_ORDER = [
     "Executive Overview",
@@ -70,6 +73,7 @@ PAGE_ORDER = [
     "Data Quality",
     "Returns Intelligence",
     "Return Comments Explorer",
+    "Order ID Explorer",
     "FSN Deep Dive",
     "Listing Issues",
     "Run History & Comparison",
@@ -185,6 +189,16 @@ def dataframe_or_empty(df: pd.DataFrame) -> pd.DataFrame:
     return df.copy()
 
 
+def first_available_frame(frames: Dict[str, pd.DataFrame], tab_names: Sequence[str]) -> tuple[pd.DataFrame, str]:
+    for tab_name in tab_names:
+        df = dataframe_or_empty(frames.get(tab_name, pd.DataFrame()))
+        if not df.empty:
+            return df, tab_name
+    if tab_names:
+        return dataframe_or_empty(frames.get(tab_names[0], pd.DataFrame())), tab_names[0]
+    return pd.DataFrame(), ""
+
+
 def unique_text_values(df: pd.DataFrame, column: str) -> List[str]:
     if column not in df.columns:
         return []
@@ -196,6 +210,12 @@ def unique_text_values(df: pd.DataFrame, column: str) -> List[str]:
             seen.add(value)
             values.append(value)
     return sorted(values, key=lambda item: item.lower())
+
+
+def count_unique_non_blank(df: pd.DataFrame, column: str) -> int:
+    if df.empty or column not in df.columns:
+        return 0
+    return len({normalize_text(value) for value in df[column].fillna("").astype(str).tolist() if normalize_text(value)})
 
 
 def resolve_column(df: pd.DataFrame, candidates: Sequence[str]) -> str:
@@ -1192,6 +1212,145 @@ def render_return_comments_explorer(frames: Dict[str, pd.DataFrame], search_filt
         preferred_columns=[column for column in ["FSN", "SKU_ID", "Product_Title", "Order_ID", "Order_Item_ID", "Return_ID", "Return_Requested_Date", "Return_Status", "Return_Reason", "Return_Sub_Reason", "Comments", "Issue_Category", "Issue_Severity", "Suggested_Action", "Source_File", "Last_Updated"] if column in filtered.columns],
         style_columns={"Issue_Category": RETURN_CATEGORY_PALETTE, "Issue_Severity": SEVERITY_PALETTE, "Suggested_Action": DECISION_PALETTE},
     )
+
+
+def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: Dict[str, str]) -> None:
+    order_df, source_tab = first_available_frame(frames, [LOOKER_ORDER_ITEM_EXPLORER_TAB, ORDER_ITEM_EXPLORER_TAB])
+    render_page_header(
+        "Order ID Explorer",
+        "Copy-friendly order-level lookup for Order ID and Order Item ID checks. Use this page to verify manual Flipkart details without editing the source data.",
+        latest_non_blank_value(order_df, ["Run_ID"]),
+    )
+    if order_df.empty:
+        st.info("No order-item explorer rows are available yet.")
+        return
+
+    order_id_col = resolve_column(order_df, ["Order_ID", "Order ID"])
+    order_item_col = resolve_column(order_df, ["Order_Item_ID", "Order Item ID"])
+    fsn_col = resolve_column(order_df, ["FSN"])
+    sku_col = resolve_column(order_df, ["SKU_ID", "Seller_SKU"])
+    title_col = resolve_column(order_df, ["Product_Title", "Product Name", "Title"])
+    return_status_col = resolve_column(order_df, ["Return_Status"])
+    return_id_col = resolve_column(order_df, ["Return_ID"])
+    return_issue_col = resolve_column(order_df, ["Return_Issue_Category", "Issue_Category"])
+    risk_col = resolve_column(order_df, ["Competition_Risk_Level"])
+    decision_col = resolve_column(order_df, ["Final_Ads_Decision"])
+
+    st.caption(f"Source tab: `{source_tab}`")
+
+    search_row_1 = st.columns(3)
+    with search_row_1[0]:
+        order_id_search = st.text_input("Order ID search", value="", key="order_item_order_id_search", placeholder="Type an Order ID")
+    with search_row_1[1]:
+        order_item_search = st.text_input("Order Item ID search", value="", key="order_item_order_item_search", placeholder="Type an Order Item ID")
+    with search_row_1[2]:
+        fsn_search = st.text_input("FSN search", value=search_filters.get("fsn", ""), key="order_item_fsn_search", placeholder="Type an FSN")
+
+    search_row_2 = st.columns(2)
+    with search_row_2[0]:
+        sku_search = st.text_input("SKU ID search", value=search_filters.get("sku", ""), key="order_item_sku_search", placeholder="Type a SKU ID")
+    with search_row_2[1]:
+        title_search = st.text_input("Product title search", value=search_filters.get("product", ""), key="order_item_title_search", placeholder="Type a product title")
+
+    filtered = order_df.copy()
+    if order_id_search and order_id_col:
+        filtered = filter_by_query(filtered, order_id_search, [order_id_col])
+    if order_item_search and order_item_col:
+        filtered = filter_by_query(filtered, order_item_search, [order_item_col])
+    if fsn_search and fsn_col:
+        filtered = filter_by_query(filtered, fsn_search, [fsn_col])
+    if sku_search and sku_col:
+        filtered = filter_by_query(filtered, sku_search, [sku_col])
+    if title_search and title_col:
+        filtered = filter_by_query(filtered, title_search, [title_col])
+
+    filter_row_1 = st.columns(2)
+    return_status_values = unique_text_values(filtered, return_status_col) if return_status_col else []
+    return_issue_values = unique_text_values(filtered, return_issue_col) if return_issue_col else []
+    with filter_row_1[0]:
+        return_status_pick = st.multiselect("Return status", return_status_values, default=return_status_values, key="order_item_return_status_filter")
+    with filter_row_1[1]:
+        return_issue_pick = st.multiselect("Return issue category", return_issue_values, default=return_issue_values, key="order_item_return_issue_filter")
+
+    filter_row_2 = st.columns(2)
+    risk_values = unique_text_values(filtered, risk_col) if risk_col else []
+    decision_values = unique_text_values(filtered, decision_col) if decision_col else []
+    with filter_row_2[0]:
+        risk_pick = st.multiselect("Competition risk level", risk_values, default=risk_values, key="order_item_risk_filter")
+    with filter_row_2[1]:
+        decision_pick = st.multiselect("Final ads decision", decision_values, default=decision_values, key="order_item_decision_filter")
+
+    if return_status_col:
+        filtered = filter_by_selected_values(filtered, return_status_col, return_status_pick)
+    if return_issue_col:
+        filtered = filter_by_selected_values(filtered, return_issue_col, return_issue_pick)
+    if risk_col:
+        filtered = filter_by_selected_values(filtered, risk_col, risk_pick)
+    if decision_col:
+        filtered = filter_by_selected_values(filtered, decision_col, decision_pick)
+
+    order_id_count = count_unique_non_blank(filtered, order_id_col) if order_id_col else 0
+    order_item_count = count_unique_non_blank(filtered, order_item_col) if order_item_col else 0
+    returned_rows = 0
+    if not filtered.empty and (return_status_col or return_id_col):
+        status_match = pd.Series(False, index=filtered.index)
+        if return_status_col:
+            status_match = status_match | (filtered[return_status_col].fillna("").astype(str).map(normalize_text) != "")
+        if return_id_col:
+            status_match = status_match | (filtered[return_id_col].fillna("").astype(str).map(normalize_text) != "")
+        returned_rows = int(status_match.sum())
+    missing_order_item_count = int((filtered[order_item_col].fillna("").astype(str).map(normalize_text) == "").sum()) if order_item_col and not filtered.empty else 0
+
+    render_metric_cards(
+        [
+            {"label": "Total Order Item Rows", "value": f"{len(filtered):,}", "note": "Current filtered view"},
+            {"label": "Unique Orders", "value": f"{order_id_count:,}", "note": "Distinct Order_ID values"},
+            {"label": "Unique Order Items", "value": f"{order_item_count:,}", "note": "Distinct Order_Item_ID values"},
+            {"label": "Returned Rows", "value": f"{returned_rows:,}", "note": "Rows with return status"},
+            {"label": "Missing Order Item ID", "value": f"{missing_order_item_count:,}", "note": "Use Order_ID + FSN + SKU_ID fallback"},
+        ],
+        columns=5,
+    )
+
+    preferred_columns = [
+        "Order_ID",
+        "Order_Item_ID",
+        "FSN",
+        "SKU_ID",
+        "Product_Title",
+        "Order_Date",
+        "Selling_Price",
+        "Net_Profit",
+        "Return_Status",
+        "Return_Reason",
+    ]
+    style_columns = {
+        "Return_Status": STATUS_PALETTE,
+        "Return_Issue_Category": RETURN_CATEGORY_PALETTE,
+        "Competition_Risk_Level": RISK_PALETTE,
+        "Final_Ads_Decision": DECISION_PALETTE,
+    }
+    render_dataframe_section(
+        "Order Item Explorer Table",
+        filtered,
+        "flipkart_order_item_explorer_filtered.csv",
+        caption="Use the table, then copy the IDs below for manual Flipkart checks.",
+        preferred_columns=[column for column in preferred_columns if column in filtered.columns],
+        style_columns={key: value for key, value in style_columns.items() if key in filtered.columns},
+    )
+
+    if not filtered.empty:
+        order_item_values = "\n".join(
+            dict.fromkeys(value for value in filtered[order_item_col].fillna("").astype(str).tolist() if normalize_text(value))
+        ) if order_item_col else ""
+        order_values = "\n".join(
+            dict.fromkeys(value for value in filtered[order_id_col].fillna("").astype(str).tolist() if normalize_text(value))
+        ) if order_id_col else ""
+        copy_cols = st.columns(2)
+        with copy_cols[0]:
+            st.text_area("Order Item IDs", value=order_item_values, height=180, help="Copy this list into Flipkart checks.", key="order_item_copy_list")
+        with copy_cols[1]:
+            st.text_area("Order IDs", value=order_values, height=180, help="Copy this list into Flipkart checks.", key="order_copy_list")
 def render_listing_issues(frames: Dict[str, pd.DataFrame], search_filters: Dict[str, str]) -> None:
     listings_df = dataframe_or_empty(frames[LISTINGS_TAB])
     missing_df = dataframe_or_empty(frames[MISSING_ACTIVE_LISTINGS_TAB])
@@ -1648,30 +1807,17 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
 
 def render_sidebar(data: Dict[str, Any], default_page: str) -> tuple[str, Dict[str, str]]:
     st.sidebar.title("Flipkart Control Tower")
-    st.sidebar.caption("Read-only Streamlit dashboard over the current Google Sheet source tabs.")
     if st.sidebar.button("Refresh data cache", use_container_width=True):
         load_dashboard_payload_from_sheet.clear()
         st.rerun()
-    st.sidebar.markdown("### Deployment Status")
+    st.sidebar.markdown("### Status")
     st.sidebar.write(f"Dashboard status: {'Online' if data.get('spreadsheet_connected') else 'Degraded'}")
     st.sidebar.write(f"Spreadsheet connected: {'Yes' if data.get('spreadsheet_connected') else 'No'}")
     st.sidebar.write(f"Last data load: {data.get('last_data_load_timestamp', '-')}")
-    if data.get("dashboard_debug"):
-        st.sidebar.markdown("#### Debug")
-        st.sidebar.write(f"Streamlit secrets available: {'Yes' if data.get('streamlit_secrets_available') else 'No'}")
-        st.sidebar.write(f"gcp_service_account block found: {'Yes' if data.get('gcp_service_account_found') else 'No'}")
-        st.sidebar.write(f"service account email: {data.get('service_account_email') or '-'}")
-        st.sidebar.write(f"private_key present: {'Yes' if data.get('private_key_present') else 'No'}")
-        st.sidebar.write(f"private_key starts with BEGIN: {'Yes' if data.get('private_key_starts_with_begin') else 'No'}")
-        st.sidebar.write(f"private_key ends with END: {'Yes' if data.get('private_key_ends_with_end') else 'No'}")
-        st.sidebar.write(f"Spreadsheet ID source: {data.get('spreadsheet_id_source', '-')}")
-        st.sidebar.write(f"Auth mode: {data.get('auth_mode', 'Local')}")
-        st.sidebar.write(f"auth error type: {data.get('auth_error_type') or '-'}")
-        st.sidebar.write(f"auth error message: {data.get('auth_error_message_safe') or '-'}")
-        st.sidebar.write(f"auth stage failed: {data.get('auth_stage_failed') or '-'}")
-        if data.get("load_message"):
-            st.sidebar.caption(data["load_message"])
+    if data.get("load_status") == "quota_limited" and data.get("load_message"):
+        st.sidebar.warning(data["load_message"])
     page = st.sidebar.selectbox("Page", PAGE_ORDER, index=PAGE_ORDER.index(default_page))
+    st.sidebar.markdown("### Filters")
     fsn_search = st.sidebar.text_input("FSN search", value="", placeholder="Type an FSN")
     sku_search = st.sidebar.text_input("SKU search", value="", placeholder="Type a SKU")
     product_search = st.sidebar.text_input("Product title search", value="", placeholder="Type a product title")
@@ -1683,16 +1829,28 @@ def render_global_notices(data: Dict[str, Any]) -> None:
         st.warning(f"Missing source tabs: {', '.join(data['missing_tabs'])}")
 
 
-def inject_css() -> None:
+def inject_dashboard_css() -> None:
     st.markdown(
         """
         <style>
         :root {
             color-scheme: light;
+            --dashboard-text: #0f172a;
+            --dashboard-muted: #475569;
+            --dashboard-sidebar-bg: #0f172a;
+            --dashboard-sidebar-surface: #ffffff;
+            --dashboard-sidebar-text: #e2e8f0;
+            --dashboard-sidebar-border: #cbd5e1;
+            --dashboard-accent: #0f766e;
+            --dashboard-accent-strong: #2563eb;
+        }
+        ::selection {
+            background: rgba(15, 118, 110, 0.18);
+            color: #0f172a;
         }
         html, body {
             background: #f8fafc !important;
-            color: #0f172a !important;
+            color: var(--dashboard-text) !important;
         }
         [data-testid="stAppViewContainer"],
         [data-testid="stHeader"],
@@ -1710,7 +1868,7 @@ def inject_css() -> None:
                 radial-gradient(circle at top right, rgba(15, 118, 110, 0.10), transparent 28%),
                 radial-gradient(circle at bottom left, rgba(37, 99, 235, 0.08), transparent 24%),
                 linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%) !important;
-            color: #0f172a !important;
+            color: var(--dashboard-text) !important;
         }
         .stApp {
             background:
@@ -1819,21 +1977,118 @@ def inject_css() -> None:
         .status-grey { background: #e2e8f0; color: #334155; }
         [data-testid="stSidebar"] {
             background: linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.98) 100%);
+            color: var(--dashboard-sidebar-text) !important;
+            border-right: 1px solid rgba(148, 163, 184, 0.20);
         }
-        [data-testid="stSidebar"] * {
-            color: #e2e8f0;
+        [data-testid="stSidebar"] *,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] div {
+            color: var(--dashboard-sidebar-text) !important;
         }
         [data-testid="stSidebar"] .stButton button {
-            background: linear-gradient(135deg, #0f766e 0%, #2563eb 100%);
-            color: white;
-            border: 0;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: #0f172a !important;
+            border: 1px solid rgba(148, 163, 184, 0.45);
             font-weight: 700;
         }
-        .stMarkdown, .stMarkdown p, .stMarkdown span, .stCaption, label, input, textarea, select {
+        [data-testid="stSidebar"] .stButton button:hover {
+            border-color: rgba(148, 163, 184, 0.75);
+        }
+        [data-testid="stSidebar"] input,
+        [data-testid="stSidebar"] textarea,
+        [data-testid="stSidebar"] select,
+        [data-testid="stSidebar"] [data-baseweb="select"] *,
+        [data-testid="stSidebar"] [data-baseweb="input"] * {
             color: #0f172a !important;
         }
+        [data-testid="stSidebar"] input,
+        [data-testid="stSidebar"] textarea {
+            background: var(--dashboard-sidebar-surface) !important;
+            border-color: var(--dashboard-sidebar-border) !important;
+        }
+        [data-testid="stSidebar"] [data-baseweb="select"] > div,
+        [data-testid="stSidebar"] [data-baseweb="input"] > div {
+            background: var(--dashboard-sidebar-surface) !important;
+            border-color: var(--dashboard-sidebar-border) !important;
+        }
+        [data-testid="stSidebar"] ::placeholder {
+            color: #64748b !important;
+            opacity: 1;
+        }
+        [data-testid="stSidebar"] .stSelectbox,
+        [data-testid="stSidebar"] .stTextInput,
+        [data-testid="stSidebar"] .stMultiSelect {
+            color: #e2e8f0 !important;
+        }
+        .stMarkdown,
+        .stMarkdown p,
+        .stMarkdown span,
+        .stCaption,
+        label,
+        input,
+        textarea,
+        select,
+        .stSelectbox,
+        .stTextInput,
+        .stMultiSelect {
+            color: var(--dashboard-text) !important;
+        }
         .stDataFrame, .stDataFrame * {
-            color: #0f172a !important;
+            color: var(--dashboard-text) !important;
+        }
+        div[data-testid="stDataFrame"] {
+            color: var(--dashboard-text) !important;
+        }
+        div[data-testid="stDataFrame"] * {
+            color: var(--dashboard-text) !important;
+        }
+        div[data-baseweb="select"] > div {
+            color: var(--dashboard-text) !important;
+        }
+        div[data-baseweb="select"] input,
+        div[data-baseweb="select"] span {
+            color: var(--dashboard-text) !important;
+        }
+        input,
+        textarea,
+        select {
+            background-color: #ffffff !important;
+            color: var(--dashboard-text) !important;
+        }
+        input::placeholder,
+        textarea::placeholder {
+            color: #94a3b8 !important;
+            opacity: 1;
+        }
+        .stButton button {
+            border-radius: 999px;
+            border: 1px solid rgba(15, 118, 110, 0.20);
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.10), rgba(37, 99, 235, 0.10));
+            color: var(--dashboard-text) !important;
+            font-weight: 700;
+        }
+        .stButton button:hover {
+            border-color: rgba(15, 118, 110, 0.42);
+        }
+        .stSelectbox div[data-baseweb="select"],
+        .stMultiSelect div[data-baseweb="select"],
+        .stTextInput div[data-baseweb="input"],
+        .stTextArea div[data-baseweb="textarea"] {
+            color: var(--dashboard-text) !important;
+        }
+        .stSelectbox div[data-baseweb="select"] > div,
+        .stMultiSelect div[data-baseweb="select"] > div,
+        .stTextInput div[data-baseweb="input"] > div,
+        .stTextArea div[data-baseweb="textarea"] > div {
+            background-color: #ffffff !important;
+            color: var(--dashboard-text) !important;
+        }
+        .stSelectbox [data-baseweb="select"] [role="combobox"],
+        .stMultiSelect [data-baseweb="select"] [role="combobox"] {
+            background-color: #ffffff !important;
+            color: var(--dashboard-text) !important;
         }
         @media (prefers-color-scheme: dark) {
             html, body, .stApp, .stAppViewContainer, section.main, .main, .block-container {
@@ -1841,16 +2096,19 @@ def inject_css() -> None:
                     radial-gradient(circle at top right, rgba(15, 118, 110, 0.10), transparent 28%),
                     radial-gradient(circle at bottom left, rgba(37, 99, 235, 0.08), transparent 24%),
                     linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%) !important;
-                color: #0f172a !important;
+                color: var(--dashboard-text) !important;
             }
             [data-testid="stSidebar"], [data-testid="stSidebar"] * {
-                color: #e2e8f0 !important;
+                color: var(--dashboard-sidebar-text) !important;
             }
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+
+inject_css = inject_dashboard_css
 
 
 def main() -> None:
@@ -1939,6 +2197,8 @@ def run_app() -> None:
         render_returns_intelligence(frames, search_filters)
     elif page == "Return Comments Explorer":
         render_return_comments_explorer(frames, search_filters)
+    elif page == "Order ID Explorer":
+        render_order_item_explorer(frames, search_filters)
     elif page == "FSN Deep Dive":
         render_fsn_drilldown(frames, search_filters)
     elif page == "Listing Issues":

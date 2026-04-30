@@ -160,6 +160,12 @@ Flipkart FSN drilldown dashboard:
 python -m src.marketplaces.flipkart.create_flipkart_fsn_drilldown
 ```
 
+Flipkart order ID explorer:
+```powershell
+python -m src.marketplaces.flipkart.create_flipkart_order_item_explorer
+python -m src.marketplaces.flipkart.verify_flipkart_order_item_explorer
+```
+
 Flipkart COGS layer verification:
 ```powershell
 python -m src.marketplaces.flipkart.verify_flipkart_cogs_layer
@@ -315,6 +321,7 @@ Looker Studio connection guide:
 8. Use `LOOKER_FLIPKART_FSN_METRICS` for the product table
 9. Use `LOOKER_FLIPKART_ALERTS` and `LOOKER_FLIPKART_ACTIONS` for the operational dashboard
 10. Use `LOOKER_FLIPKART_ADS`, `LOOKER_FLIPKART_RETURNS`, and `LOOKER_FLIPKART_LISTINGS` for the supporting views
+11. Use `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER` for copy-friendly Order ID / Order Item ID checks
 
 Stage 6 note:
 - `create_flipkart_alerts_and_tasks` now prefers `Final_Net_Profit` and `Final_Profit_Margin` when `COGS_Status` is `Entered` or `Verified`, and falls back to `Net_Profit_Before_COGS` plus COGS-missing alerts when cost is unavailable

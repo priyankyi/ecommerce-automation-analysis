@@ -27,37 +27,17 @@
 24. Streamlit Dashboard Expansion
 
 ## Latest Completed Phase
-Phase 24 - Streamlit Dashboard Expansion
+Phase 27 - Streamlit UX Cleanup + Order Item Explorer
 
 ### Added
-- `src/dashboard/flipkart_streamlit_app.py` expanded into the primary Flipkart Control Tower dashboard
-- `run_flipkart_dashboard.ps1` is the one-command wrapper for launching Streamlit
-- `docs/STREAMLIT_DASHBOARD_SOP.md` added as the daily operating guide
-- `README.md` now points team commands at Streamlit first
-- Streamlit and Plotly dependencies are present in `requirements.txt`
-- Dashboard compiles successfully with `python -m py_compile src/dashboard/flipkart_streamlit_app.py`
-- Streamlit is now the primary Flipkart Control Tower dashboard
-- Looker Studio is optional / secondary and consumes the `LOOKER_*` source tabs
-- Chrome DevTools / Looker Studio UI automation is rejected for this phase because it is slow, token-heavy, and fragile
-- Dashboard pages added or expanded: `Executive Overview`, `Alerts & Actions`, `Profit & COGS`, `Ads Planner`, `Competitor Risk`, `Data Quality`, `Returns Intelligence`, `Return Comments Explorer`, `FSN Deep Dive`, `Listing Issues`, `Run History & Comparison`, and `Raw Data Explorer / Downloads`
-- Dashboard sources include the `LOOKER_*` tabs plus `FLIPKART_RETURN_COMMENTS`, `FLIPKART_RETURN_ISSUE_SUMMARY`, `FLIPKART_RETURN_REASON_PIVOT`, `FLIPKART_MISSING_ACTIVE_LISTINGS`, `FLIPKART_FSN_RUN_COMPARISON`, and `FLIPKART_VISUAL_COMPETITOR_RESULTS`
-- Dashboard behavior remains read-only and does not run the full Flipkart pipeline, call Google Ads API, call SerpApi / Google Lens, touch `MASTER_SKU`, touch other marketplaces, expose credentials, or write back to Google Sheets
-- Dashboard warning handling now includes missing-tab notices and Google Sheets quota limit messaging
-- `src/backup_google_sheet.py` added
-- `src/import_master_skus.py` added
-- `src/validate_phase15_pipeline.py` added
-- `data/input/sku_import_template.csv` created
-- Phase 15 prepares the system for real SKU onboarding and validation
-- Test/sample SKUs remain in place; no fake real SKUs were imported
-- `src/backup_project_code.py` added
-- `src/marketplaces/flipkart/update_flipkart_run_history.py` added
-- `FLIPKART_RUN_HISTORY` and `FLIPKART_FSN_HISTORY` support added to the Flipkart runner
-- Flipkart runs now keep local code backups and append-only run history
-- `src/marketplaces/flipkart/create_flipkart_alerts_and_tasks.py` added
-- `FLIPKART_ALERTS_GENERATED`, `FLIPKART_ACTION_TRACKER`, and `FLIPKART_ACTIVE_TASKS` support added
-- `src/marketplaces/flipkart/verify_flipkart_alerts_tasks.py` added
-- Stage 2 alerts/tasks layer is implemented and verified with read-only tab checks
-- Latest Stage 2 verification: `alerts_generated_rows=235`, `action_tracker_rows=235`, `active_tasks_rows=235`
+- `src/dashboard/flipkart_streamlit_app.py` now uses a centralized `inject_dashboard_css()` helper with stronger sidebar, selectbox, text input, placeholder, table, and metric-card contrast
+- The production sidebar now stays focused on status, refresh, page selection, and filters without exposing auth/debug internals
+- `Order ID Explorer` was added to Streamlit for copy-friendly Order ID / Order Item ID lookup, FSN/SKU/title search, return and decision filters, copy areas, and filtered CSV download
+- `src/marketplaces/flipkart/create_flipkart_order_item_explorer.py` and `src/marketplaces/flipkart/verify_flipkart_order_item_explorer.py` were added to generate and verify `FLIPKART_ORDER_ITEM_EXPLORER` plus `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER`
+- `run_flipkart_post_analysis_refresh.py` now runs the order-item explorer before Looker source rebuilds in quick/full refresh paths
+- Looker source and verification layers now include the new order-item explorer tab
+- Latest order-item explorer verification: `status=PASS`, `order_item_rows=3017`, `looker_rows=3017`, `order_id_present_count=2934`, `order_item_id_present_count=2934`, `duplicate_order_item_id_count=0`, `blank_fsn_count=0`
+- Latest quick refresh result: `status=SUCCESS_WITH_WARNINGS`, `verification_passed=true`, `steps_run=update_product_type_demand_profile -> create_flipkart_competitor_price_intelligence -> create_flipkart_order_item_explorer -> create_looker_studio_sources -> verify_flipkart_integration_layer -> verify_flipkart_system_health`
 - Latest Stage 2 verification: `critical_alerts=22`, `high_alerts=70`, `medium_alerts=104`, `low_alerts=39`
 - Latest Stage 2 verification: `duplicate_alert_id_count=0`, all current tracker statuses `Open`
 - Latest successful wrapper run: `.\run_flipkart_pipeline.ps1`
@@ -175,10 +155,32 @@ Phase 24 - Streamlit Dashboard Expansion
 - `config/streamlit_secrets_template.toml` added as the secrets template
 - `docs/STREAMLIT_CLOUD_DEPLOYMENT.md` added as the noob-friendly deployment guide
 - `README.md` now includes a Hosted Dashboard section
+- Streamlit Cloud dashboard is now live at `https://sparkworld-flipkart-control-tower.streamlit.app/`
+- Streamlit Cloud auth resolution now uses `MASTER_SPREADSHEET_ID` from Streamlit Secrets first and service-account auth works against the shared Google Sheet
+- Dashboard debug/auth diagnostics are hidden by default and only appear when `DASHBOARD_DEBUG=true`
+- Dashboard remains read-only and does not call Google Ads API or SerpApi / Google Lens
 
 ### Validation
 - `python -m py_compile src/dashboard/flipkart_streamlit_app.py src/dashboard/dashboard_google_sheets.py`
 - Dashboard remains read-only, does not run the full Flipkart pipeline, does not call Google Ads API, does not call SerpApi / Google Lens, does not touch `MASTER_SKU`, does not touch other marketplaces, and does not expose credentials
+- Service-account private key was exposed during setup and must be rotated in Google Cloud; future keys must never be pasted into chat or committed to GitHub
+
+## Phase 27 - Streamlit UX Cleanup + Order Item Explorer
+
+### Added
+- `src/dashboard/flipkart_streamlit_app.py` now uses a centralized `inject_dashboard_css()` helper with stronger sidebar, selectbox, text input, placeholder, button, table, and metric-card contrast
+- The production sidebar now stays focused on status, refresh, page selection, and filters without exposing auth/debug internals
+- `Order ID Explorer` was added to Streamlit for copy-friendly Order ID / Order Item ID lookup, FSN/SKU/title search, return and decision filters, copy areas, and filtered CSV download
+- `src/marketplaces/flipkart/create_flipkart_order_item_explorer.py` and `src/marketplaces/flipkart/verify_flipkart_order_item_explorer.py` were added to generate and verify `FLIPKART_ORDER_ITEM_EXPLORER` plus `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER`
+- `run_flipkart_post_analysis_refresh.py` now runs the order-item explorer before Looker source rebuilds in quick/full refresh paths
+- Looker source and verification layers now include the new order-item explorer tab
+
+### Validation
+- `python -m py_compile src/dashboard/flipkart_streamlit_app.py src/dashboard/dashboard_google_sheets.py src/marketplaces/flipkart/create_flipkart_order_item_explorer.py src/marketplaces/flipkart/verify_flipkart_order_item_explorer.py`
+- `python -m src.marketplaces.flipkart.create_flipkart_order_item_explorer`
+- `python -m src.marketplaces.flipkart.verify_flipkart_order_item_explorer`
+- `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick`
+- `python -m src.safety.check_repo_safety`
 
 ## Current Focus
 Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, Upgrade 8 module-wise data confidence is complete and verified, Upgrade 9 Google Keyword Planner integration is fallback-safe, and Upgrade 10 live visual competitor search is verified.
@@ -187,11 +189,12 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Streamlit dashboard app exists at `src/dashboard/flipkart_streamlit_app.py`
 - Streamlit wrapper exists at `run_flipkart_dashboard.ps1`
 - Wrapper launch command is `python -m streamlit run src/dashboard/flipkart_streamlit_app.py`
-- Dashboard pages in scope: `Executive Overview`, `Alerts & Actions`, `Profit & COGS`, `Ads Planner`, `Competitor Risk`, `Data Quality`, `Returns Intelligence`, `Return Comments Explorer`, `FSN Deep Dive`, `Listing Issues`, `Run History & Comparison`, and `Raw Data Explorer / Downloads`
+- Dashboard pages in scope: `Executive Overview`, `Alerts & Actions`, `Profit & COGS`, `Ads Planner`, `Competitor Risk`, `Data Quality`, `Returns Intelligence`, `Return Comments Explorer`, `Order ID Explorer`, `FSN Deep Dive`, `Listing Issues`, `Run History & Comparison`, and `Raw Data Explorer / Downloads`
 - Dashboard is read-only against Google Sheets generated/source tabs and never writes back from Streamlit
 - Dashboard reads dashboard source tabs only and must not depend on local credentials/ folders in hosted mode
 - App must support Streamlit Cloud secrets while still working locally
-- Keep warnings visible for Google Keyword Planner Basic Access pending, `GOOGLE_KEYWORD_METRICS_CACHE` rows pending, and incomplete competitor rows caused by missing image URLs
+- Keep warnings visible only for spreadsheet disconnects, missing tabs, and quota issues in the production sidebar; hide auth internals unless `DASHBOARD_DEBUG=true`
+- Streamlit UX cleanup plus order-item explorer support is complete and verified; the dashboard remains read-only, Flipkart-only, and source-driven
 - Chrome DevTools / Looker Studio UI automation is rejected for dashboard work because it is slow, token-heavy, and fragile
 - Upgrade 10 live result: `SerpApi visual search calls used this month=8`, `safe remaining calls=192`, `visual_result_rows=51`, `flipkart_only_url_violations=0`
 - Upgrade 10 verification result: `competitor intelligence verification=PASS`
@@ -237,6 +240,7 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Latest dashboard launch path: `python -m streamlit run src/dashboard/flipkart_streamlit_app.py`
 - Latest successful dashboard run status: `SUCCESS`
 - Latest dashboard summary: `dashboard pages compiled successfully`, `read-only source tabs only`, `download/export only`, `missing-tab warnings handled`, `quota warning handled`
+- Latest live dashboard status: `Auth mode=Streamlit Secrets`, `Spreadsheet ID source=Streamlit Secrets`, `Spreadsheet connected=Yes`, `Tabs loaded=20/20`
 - Latest Stage 7B dashboard summary: `fsns_with_return_issue_summary=59`, `critical_return_issue_fsns=20`, `product_issue_fsns=26`, `logistics_issue_fsns=19`, `customer_rto_issue_fsns=5`
 - Latest Stage 7B dashboard summary: `return_fraud_risk_fsns=0`, `top_return_issue_category=Other`, `total_classified_return_comments=151`, `other_return_comments_count=270`
 - Flipkart API is not usable right now; Developer Access is pending and API tests returned HTTP 401

@@ -18,6 +18,7 @@ from src.marketplaces.flipkart.create_looker_studio_sources import (
     LOOKER_COMPETITOR_INTELLIGENCE_TAB,
     LOOKER_DEMAND_PROFILE_TAB,
     LOOKER_MODULE_CONFIDENCE_TAB,
+    LOOKER_ORDER_ITEM_EXPLORER_TAB,
     LOOKER_REPORT_FORMAT_MONITOR_TAB,
     LOOKER_RUN_COMPARISON_TAB,
     LOOKER_RUN_QUALITY_TAB,
@@ -55,6 +56,7 @@ KEY_GENERATED_TABS = [
     "FLIPKART_COMPETITOR_SEARCH_QUEUE",
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
     "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
+    "FLIPKART_ORDER_ITEM_EXPLORER",
 ]
 
 LOOKER_TABS_FOR_INTEGRATION = [
@@ -65,6 +67,7 @@ LOOKER_TABS_FOR_INTEGRATION = [
     LOOKER_MODULE_CONFIDENCE_TAB,
     LOOKER_DEMAND_PROFILE_TAB,
     LOOKER_COMPETITOR_INTELLIGENCE_TAB,
+    LOOKER_ORDER_ITEM_EXPLORER_TAB,
 ]
 
 
@@ -233,6 +236,8 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         "keyword_cache_tab_exists",
         "demand_profile_has_rows",
         "competitor_intelligence_has_rows",
+        "order_item_explorer_has_rows",
+        "looker_order_item_explorer_has_rows",
     ]
     looker_required_tabs = LOOKER_TABS_FOR_INTEGRATION
     looker_source_has_new_tabs = all(tab_name in looker_source_text for tab_name in looker_required_tabs)

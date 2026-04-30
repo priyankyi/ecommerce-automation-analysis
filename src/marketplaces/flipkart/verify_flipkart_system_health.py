@@ -32,6 +32,7 @@ TABS_TO_CHECK = [
     "FLIPKART_MISSING_ACTIVE_LISTINGS",
     "FLIPKART_RUN_HISTORY",
     "FLIPKART_FSN_HISTORY",
+    "FLIPKART_ORDER_ITEM_EXPLORER",
     "FLIPKART_ADJUSTMENTS_LEDGER",
     "FLIPKART_ADJUSTED_PROFIT",
     "FLIPKART_RUN_COMPARISON",
@@ -47,6 +48,7 @@ TABS_TO_CHECK = [
     "FLIPKART_COMPETITOR_SEARCH_QUEUE",
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
     "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
+    "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
 ]
 
 
@@ -187,6 +189,7 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     active_rows = tables["FLIPKART_ACTIVE_TASKS"][1]
     ads_planner_rows = tables["FLIPKART_ADS_PLANNER"][1]
     missing_listing_rows = tables["FLIPKART_MISSING_ACTIVE_LISTINGS"][1]
+    order_item_rows = tables["FLIPKART_ORDER_ITEM_EXPLORER"][1]
     return_issue_rows = tables["FLIPKART_RETURN_ISSUE_SUMMARY"][1]
     run_comparison_rows = tables["FLIPKART_RUN_COMPARISON"][1]
     adjusted_profit_rows = tables["FLIPKART_ADJUSTED_PROFIT"][1]
@@ -201,6 +204,8 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     competitor_queue_rows = tables["FLIPKART_COMPETITOR_SEARCH_QUEUE"][1]
     competitor_result_rows = tables["FLIPKART_VISUAL_COMPETITOR_RESULTS"][1]
     competitor_price_rows = tables["FLIPKART_COMPETITOR_PRICE_INTELLIGENCE"][1]
+    looker_order_item_rows = tables["LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"][1]
+    row_counts = {tab_name: row_count(rows_data) for tab_name, (_, rows_data) in tables.items()}
 
     run_quality_score_value = 0.0
     if run_quality_score_rows:
@@ -224,6 +229,14 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         warnings.append("competitor intelligence contains Not Enough Data rows")
     if report_format_critical_issue_count > 0:
         warnings.append("report format critical issues present")
+    if "FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs:
+        warnings.append("order item explorer source tab is missing")
+    elif not order_item_rows:
+        warnings.append("order item explorer source tab is empty")
+    if "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs:
+        warnings.append("looker order item explorer tab is missing")
+    elif not looker_order_item_rows:
+        warnings.append("looker order item explorer tab is empty")
 
     optional_zero_row_tabs = {
         "FLIPKART_ADJUSTMENTS_LEDGER",
@@ -231,6 +244,7 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         "GOOGLE_KEYWORD_METRICS_CACHE",
         "FLIPKART_COMPETITOR_SEARCH_QUEUE",
         "FLIPKART_VISUAL_COMPETITOR_RESULTS",
+        "FLIPKART_ORDER_ITEM_EXPLORER",
     }
     required_row_tabs = [tab_name for tab_name in TABS_TO_CHECK if tab_name not in optional_zero_row_tabs]
 
@@ -250,7 +264,7 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     }
 
     checks = {
-        "all_required_tabs_present": not missing_tabs,
+        "all_required_tabs_present": not [tab_name for tab_name in missing_tabs if tab_name not in {"FLIPKART_ORDER_ITEM_EXPLORER", "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"}],
         "sku_analysis_has_rows": row_counts["FLIPKART_SKU_ANALYSIS"] > 0,
         "cost_master_has_rows": row_counts["FLIPKART_COST_MASTER"] > 0,
         "alerts_generated_has_rows": row_counts["FLIPKART_ALERTS_GENERATED"] > 0,
@@ -281,7 +295,12 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         "optional_visual_results_tab_exists": "FLIPKART_VISUAL_COMPETITOR_RESULTS" not in missing_tabs,
         "report_format_issues_tab_exists": "FLIPKART_REPORT_FORMAT_ISSUES" not in missing_tabs,
         "adjustments_ledger_tab_exists": "FLIPKART_ADJUSTMENTS_LEDGER" not in missing_tabs,
+        "order_item_explorer_has_rows": ("FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs) or row_counts["FLIPKART_ORDER_ITEM_EXPLORER"] > 0,
+        "looker_order_item_explorer_has_rows": ("LOOKER_FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs) or row_counts["LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"] > 0,
     }
+
+    required_missing_tabs = [tab_name for tab_name in missing_tabs if tab_name not in {"FLIPKART_ORDER_ITEM_EXPLORER", "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"}]
+    checks["all_required_tabs_present"] = not required_missing_tabs
 
     status = "PASS_WITH_WARNINGS" if all(checks.values()) and warnings else ("PASS" if all(checks.values()) else "FAIL")
     return {

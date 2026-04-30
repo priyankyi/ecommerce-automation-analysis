@@ -31,6 +31,7 @@ Use these pages most often:
 1. `Ads Planner`
 1. `Returns Intelligence`
 1. `Return Comments Explorer`
+1. `Order ID Explorer`
 1. `FSN Deep Dive`
 1. `Listing Issues`
 1. `Run History & Comparison`
@@ -55,6 +56,8 @@ Use `Competitor Risk`, `Data Quality`, and `Raw Data Explorer / Downloads` when 
 - Do not touch `MASTER_SKU`.
 - Do not touch other marketplaces.
 - Do not expose credentials.
+- Use `Order ID Explorer` to copy `Order_ID` and `Order_Item_ID` for manual Flipkart checks.
+- If order IDs are missing, check whether the raw order report or normalized order layer is available before editing anything.
 
 ## Data Editing
 
@@ -82,12 +85,14 @@ The dashboard reads these read-only source tabs:
 - `LOOKER_FLIPKART_MODULE_CONFIDENCE`
 - `LOOKER_FLIPKART_DEMAND_PROFILE`
 - `LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE`
+- `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER`
 - `FLIPKART_RETURN_COMMENTS`
 - `FLIPKART_RETURN_ISSUE_SUMMARY`
 - `FLIPKART_RETURN_REASON_PIVOT`
 - `FLIPKART_MISSING_ACTIVE_LISTINGS`
 - `FLIPKART_FSN_RUN_COMPARISON`
 - `FLIPKART_VISUAL_COMPETITOR_RESULTS`
+- `FLIPKART_ORDER_ITEM_EXPLORER`
 
 ## Notes
 

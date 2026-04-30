@@ -46,6 +46,7 @@ STEP_TAB_MAP: Dict[str, List[str]] = {
     "update_product_type_demand_profile": ["PRODUCT_TYPE_DEMAND_PROFILE"],
     "run_flipkart_visual_competitor_search": ["FLIPKART_COMPETITOR_SEARCH_QUEUE", "FLIPKART_VISUAL_COMPETITOR_RESULTS"],
     "create_flipkart_competitor_price_intelligence": ["FLIPKART_COMPETITOR_PRICE_INTELLIGENCE", "LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE"],
+    "create_flipkart_order_item_explorer": ["FLIPKART_ORDER_ITEM_EXPLORER", "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"],
     "create_looker_studio_sources": [
         "LOOKER_FLIPKART_EXECUTIVE_SUMMARY",
         "LOOKER_FLIPKART_FSN_METRICS",
@@ -54,6 +55,7 @@ STEP_TAB_MAP: Dict[str, List[str]] = {
         "LOOKER_FLIPKART_ADS",
         "LOOKER_FLIPKART_RETURNS",
         "LOOKER_FLIPKART_LISTINGS",
+        "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
         "LOOKER_FLIPKART_RUN_COMPARISON",
         "LOOKER_FLIPKART_ADJUSTED_PROFIT",
         "LOOKER_FLIPKART_REPORT_FORMAT_MONITOR",
@@ -84,6 +86,7 @@ STEP_MODULES: Dict[str, str] = {
     "update_product_type_demand_profile": "src.marketplaces.flipkart.update_product_type_demand_profile",
     "run_flipkart_visual_competitor_search": "src.marketplaces.flipkart.run_flipkart_visual_competitor_search",
     "create_flipkart_competitor_price_intelligence": "src.marketplaces.flipkart.create_flipkart_competitor_price_intelligence",
+    "create_flipkart_order_item_explorer": "src.marketplaces.flipkart.create_flipkart_order_item_explorer",
     "create_looker_studio_sources": "src.marketplaces.flipkart.create_looker_studio_sources",
     "sync_flipkart_run_archive_to_drive": "src.marketplaces.flipkart.sync_flipkart_run_archive_to_drive",
     "verify_flipkart_cogs_layer": "src.marketplaces.flipkart.verify_flipkart_cogs_layer",
@@ -123,6 +126,7 @@ STEP_ORDER: List[str] = [
     "create_flipkart_module_confidence",
     "update_product_type_demand_profile",
     "create_flipkart_competitor_price_intelligence",
+    "create_flipkart_order_item_explorer",
     "create_looker_studio_sources",
 ]
 
@@ -130,6 +134,7 @@ MODE_STEP_ORDER: Dict[str, List[str]] = {
     "quick": [
         "update_product_type_demand_profile",
         "create_flipkart_competitor_price_intelligence",
+        "create_flipkart_order_item_explorer",
         "create_looker_studio_sources",
         "verify_flipkart_integration_layer",
         "verify_flipkart_system_health",

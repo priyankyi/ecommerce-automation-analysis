@@ -23,6 +23,7 @@ from src.marketplaces.flipkart.create_looker_studio_sources import (
     LOOKER_FSN_METRICS_TAB,
     LOOKER_MODULE_CONFIDENCE_TAB,
     LOOKER_LISTINGS_TAB,
+    LOOKER_ORDER_ITEM_EXPLORER_TAB,
     LOOKER_REPORT_FORMAT_MONITOR_TAB,
     LOOKER_RETURNS_TAB,
     LOOKER_RUN_COMPARISON_TAB,
@@ -45,7 +46,7 @@ FSN_LEVEL_TABS = [
     LOOKER_ADS_TAB,
     LOOKER_RETURNS_TAB,
     LOOKER_LISTINGS_TAB,
-    LOOKER_RUN_COMPARISON_TAB,
+    LOOKER_ORDER_ITEM_EXPLORER_TAB,
     LOOKER_ADJUSTED_PROFIT_TAB,
     LOOKER_MODULE_CONFIDENCE_TAB,
     LOOKER_COMPETITOR_INTELLIGENCE_TAB,
@@ -59,6 +60,7 @@ EXPECTED_ROW_TABS = [
     LOOKER_ADS_TAB,
     LOOKER_RETURNS_TAB,
     LOOKER_LISTINGS_TAB,
+    LOOKER_ORDER_ITEM_EXPLORER_TAB,
     LOOKER_RUN_COMPARISON_TAB,
     LOOKER_ADJUSTED_PROFIT_TAB,
     LOOKER_REPORT_FORMAT_MONITOR_TAB,
@@ -150,6 +152,7 @@ def verify_looker_studio_sources() -> Dict[str, Any]:
     ads_rows = looker_tables[LOOKER_ADS_TAB]
     return_rows = looker_tables[LOOKER_RETURNS_TAB]
     listing_rows = looker_tables[LOOKER_LISTINGS_TAB]
+    order_item_rows = looker_tables[LOOKER_ORDER_ITEM_EXPLORER_TAB]
     run_comparison_rows = looker_tables[LOOKER_RUN_COMPARISON_TAB]
     adjusted_profit_rows = looker_tables[LOOKER_ADJUSTED_PROFIT_TAB]
     report_format_rows = looker_tables[LOOKER_REPORT_FORMAT_MONITOR_TAB]
@@ -165,6 +168,7 @@ def verify_looker_studio_sources() -> Dict[str, Any]:
         LOOKER_ADS_TAB: count_blank_fsn(ads_rows),
         LOOKER_RETURNS_TAB: count_blank_fsn(return_rows),
         LOOKER_LISTINGS_TAB: count_blank_fsn(listing_rows),
+        LOOKER_ORDER_ITEM_EXPLORER_TAB: count_blank_fsn(order_item_rows),
         LOOKER_RUN_COMPARISON_TAB: count_blank_fsn(run_comparison_rows),
         LOOKER_ADJUSTED_PROFIT_TAB: count_blank_fsn(adjusted_profit_rows),
         LOOKER_MODULE_CONFIDENCE_TAB: count_blank_fsn(module_confidence_rows),
@@ -257,6 +261,7 @@ def verify_looker_studio_sources() -> Dict[str, Any]:
         LOOKER_MODULE_CONFIDENCE_TAB: module_confidence_source_rows,
         LOOKER_DEMAND_PROFILE_TAB: demand_profile_source_rows,
         LOOKER_COMPETITOR_INTELLIGENCE_TAB: competitor_intelligence_source_rows,
+        LOOKER_ORDER_ITEM_EXPLORER_TAB: source_row_counts.get("FLIPKART_ORDER_ITEM_EXPLORER", 0),
     }
 
     fsn_blank_check_tabs = [tab_name for tab_name in FSN_LEVEL_TABS if tab_name in blank_fsn_counts]
@@ -271,6 +276,7 @@ def verify_looker_studio_sources() -> Dict[str, Any]:
         source_row_counts.get(tab_name, 0) > 0 for tab_name in SOURCE_TABS if tab_name not in optional_source_tabs
     )
     run_quality_tab_row_count_matches_source = row_counts.get(LOOKER_RUN_QUALITY_TAB, 0) == expected_row_counts[LOOKER_RUN_QUALITY_TAB]
+    order_item_tab_row_count_matches_source = row_counts.get(LOOKER_ORDER_ITEM_EXPLORER_TAB, 0) == expected_row_counts[LOOKER_ORDER_ITEM_EXPLORER_TAB]
 
     checks = {
         "all_looker_tabs_exist": not missing_tabs,
@@ -285,6 +291,7 @@ def verify_looker_studio_sources() -> Dict[str, Any]:
         "module_confidence_row_count_matches_source": row_counts.get(LOOKER_MODULE_CONFIDENCE_TAB, 0) == expected_row_counts[LOOKER_MODULE_CONFIDENCE_TAB],
         "demand_profile_row_count_matches_source": row_counts.get(LOOKER_DEMAND_PROFILE_TAB, 0) == expected_row_counts[LOOKER_DEMAND_PROFILE_TAB],
         "competitor_intelligence_row_count_matches_source": row_counts.get(LOOKER_COMPETITOR_INTELLIGENCE_TAB, 0) == expected_row_counts[LOOKER_COMPETITOR_INTELLIGENCE_TAB],
+        "order_item_explorer_row_count_matches_source": order_item_tab_row_count_matches_source,
         "keyword_cache_pending_rows_allowed": keyword_cache_pending_count >= 0,
         "competitor_not_enough_data_rows_allowed": competitor_not_enough_data_count >= 0,
     }

@@ -113,11 +113,11 @@ def _normalize_secret_info(secret_value: Any) -> Dict[str, Any] | None:
         return None
 
     if "private_key" in normalized and normalized["private_key"] is not None:
-        private_key = str(normalized["private_key"]).strip()
-        private_key = private_key.replace("\\n", "\n")
-        if private_key and not private_key.endswith("\n"):
-            private_key += "\n"
-        normalized["private_key"] = private_key
+        private_key_text = str(normalized["private_key"]).strip()
+        private_key_text = private_key_text.replace("\\n", "\n")
+        if private_key_text and not private_key_text.endswith("\n"):
+            private_key_text += "\n"
+        normalized["private_key"] = private_key_text
     return normalized
 
 
@@ -194,14 +194,14 @@ def _infer_auth_stage_from_message(message: str) -> str:
 
 def _service_account_diagnostics(service_account_info: Dict[str, Any] | None, service_account_block_found: bool) -> Dict[str, Any]:
     info = service_account_info or {}
-    private_key = str(info.get("private_key", "")).strip().replace("\\n", "\n")
+    private_key_text = str(info.get("private_key", "")).strip().replace("\\n", "\n")
     return {
         "service_account_block_found": service_account_block_found,
         "gcp_service_account_found": service_account_block_found,
         "client_email_present": bool(str(info.get("client_email", "")).strip()),
-        "private_key_present": bool(private_key),
-        "private_key_starts_with_begin": private_key.startswith("-----BEGIN PRIVATE KEY-----"),
-        "private_key_ends_with_end": private_key.strip().endswith("-----END PRIVATE KEY-----"),
+        "private_key_present": bool(private_key_text),
+        "private_key_starts_with_begin": private_key_text.startswith("-----BEGIN PRIVATE KEY-----"),
+        "private_key_ends_with_end": private_key_text.strip().endswith("-----END PRIVATE KEY-----"),
         "service_account_email": str(info.get("client_email", "")).strip(),
     }
 
@@ -209,10 +209,10 @@ def _service_account_diagnostics(service_account_info: Dict[str, Any] | None, se
 def _build_service_account_credentials(service_account_info: Dict[str, Any]) -> ServiceAccountCredentials:
     normalized = dict(service_account_info)
     if "private_key" in normalized and normalized["private_key"] is not None:
-        private_key = str(normalized["private_key"]).strip().replace("\\n", "\n")
-        if private_key and not private_key.endswith("\n"):
-            private_key += "\n"
-        normalized["private_key"] = private_key
+        private_key_text = str(normalized["private_key"]).strip().replace("\\n", "\n")
+        if private_key_text and not private_key_text.endswith("\n"):
+            private_key_text += "\n"
+        normalized["private_key"] = private_key_text
     return ServiceAccountCredentials.from_service_account_info(normalized, scopes=list(READONLY_SCOPES))
 
 
@@ -478,6 +478,8 @@ def load_dashboard_payload() -> Dict[str, Any]:
             "FLIPKART_MISSING_ACTIVE_LISTINGS",
             "FLIPKART_FSN_RUN_COMPARISON",
             "FLIPKART_VISUAL_COMPETITOR_RESULTS",
+            "FLIPKART_ORDER_ITEM_EXPLORER",
+            "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
         ]:
             if tab_name in available_tabs:
                 frames[tab_name] = read_tab_dataframe(sheets_service, spreadsheet_id, tab_name)
