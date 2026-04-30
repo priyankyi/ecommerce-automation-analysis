@@ -43,6 +43,21 @@ SOURCE_TABS = [
     "FLIPKART_MISSING_ACTIVE_LISTINGS",
     "FLIPKART_RUN_HISTORY",
     "FLIPKART_FSN_HISTORY",
+    "FLIPKART_ADJUSTMENTS_LEDGER",
+    "FLIPKART_ADJUSTED_PROFIT",
+    "FLIPKART_RUN_COMPARISON",
+    "FLIPKART_FSN_RUN_COMPARISON",
+    "FLIPKART_REPORT_FORMAT_MONITOR",
+    "FLIPKART_REPORT_FORMAT_ISSUES",
+    "FLIPKART_RUN_QUALITY_SCORE",
+    "FLIPKART_RUN_QUALITY_BREAKDOWN",
+    "FLIPKART_MODULE_CONFIDENCE",
+    "FLIPKART_DATA_GAP_SUMMARY",
+    "GOOGLE_KEYWORD_METRICS_CACHE",
+    "PRODUCT_TYPE_DEMAND_PROFILE",
+    "FLIPKART_COMPETITOR_SEARCH_QUEUE",
+    "FLIPKART_VISUAL_COMPETITOR_RESULTS",
+    "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
 ]
 
 LOOKER_EXECUTIVE_TAB = "LOOKER_FLIPKART_EXECUTIVE_SUMMARY"
@@ -52,6 +67,13 @@ LOOKER_ACTIONS_TAB = "LOOKER_FLIPKART_ACTIONS"
 LOOKER_ADS_TAB = "LOOKER_FLIPKART_ADS"
 LOOKER_RETURNS_TAB = "LOOKER_FLIPKART_RETURNS"
 LOOKER_LISTINGS_TAB = "LOOKER_FLIPKART_LISTINGS"
+LOOKER_ADJUSTED_PROFIT_TAB = "LOOKER_FLIPKART_ADJUSTED_PROFIT"
+LOOKER_REPORT_FORMAT_MONITOR_TAB = "LOOKER_FLIPKART_REPORT_FORMAT_MONITOR"
+LOOKER_RUN_QUALITY_TAB = "LOOKER_FLIPKART_RUN_QUALITY_SCORE"
+LOOKER_MODULE_CONFIDENCE_TAB = "LOOKER_FLIPKART_MODULE_CONFIDENCE"
+LOOKER_DEMAND_PROFILE_TAB = "LOOKER_FLIPKART_DEMAND_PROFILE"
+LOOKER_COMPETITOR_INTELLIGENCE_TAB = "LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE"
+LOOKER_RUN_COMPARISON_TAB = "LOOKER_FLIPKART_RUN_COMPARISON"
 
 LOOKER_TABS = [
     LOOKER_EXECUTIVE_TAB,
@@ -61,6 +83,13 @@ LOOKER_TABS = [
     LOOKER_ADS_TAB,
     LOOKER_RETURNS_TAB,
     LOOKER_LISTINGS_TAB,
+    LOOKER_RUN_COMPARISON_TAB,
+    LOOKER_ADJUSTED_PROFIT_TAB,
+    LOOKER_REPORT_FORMAT_MONITOR_TAB,
+    LOOKER_RUN_QUALITY_TAB,
+    LOOKER_MODULE_CONFIDENCE_TAB,
+    LOOKER_DEMAND_PROFILE_TAB,
+    LOOKER_COMPETITOR_INTELLIGENCE_TAB,
 ]
 
 LOOKER_HEADERS = {
@@ -199,19 +228,19 @@ METRIC_ROWS = [
 ]
 
 
-def retry(func: Callable[[], Any], attempts: int = 4) -> Any:
-    delay = 1.0
+def retry(func: Callable[[], Any], attempts: int = 3) -> Any:
+    delays = (30, 60, 90)
     for attempt in range(1, attempts + 1):
         try:
             return func()
         except HttpError as exc:
             status = getattr(exc.resp, "status", None)
-            if status != 503 or attempt == attempts:
+            if status not in {429, 500, 502, 503} or attempt == attempts:
                 raise
             import time
 
+            delay = delays[min(attempt - 1, len(delays) - 1)]
             time.sleep(delay)
-            delay *= 2
 
 
 def load_json(path: Path) -> Dict[str, Any]:
@@ -622,8 +651,9 @@ def build_fsn_metrics_rows(
 
         cost_price, total_unit_cogs, total_cogs, final_net_profit = resolve_cogs_fields(analysis_row)
         final_profit_margin = safe_metric_text(analysis_row, "Final_Profit_Margin")
-        if not final_profit_margin and final_net_profit and safe_metric_text(analysis_row, "Gross_Sales"):
-            final_profit_margin = normalize_number_text(parse_float(final_net_profit) / parse_float(analysis_row.get("Gross_Sales", "")), 4)
+        gross_sales_value = parse_float(analysis_row.get("Gross_Sales", ""))
+        if not final_profit_margin and final_net_profit and gross_sales_value > 0:
+            final_profit_margin = normalize_number_text(parse_float(final_net_profit) / gross_sales_value, 4)
 
         rows.append(
             {
@@ -864,6 +894,209 @@ def write_output_tab(
     add_basic_filter(sheets_service, spreadsheet_id, sheet_id, len(headers), len(rows) + 1)
 
 
+def read_optional_table(sheets_service, spreadsheet_id: str, tab_name: str) -> Tuple[List[str], List[Dict[str, str]]]:
+    if not tab_exists(sheets_service, spreadsheet_id, tab_name):
+        return [], []
+    return read_table(sheets_service, spreadsheet_id, tab_name)
+
+
+def read_first_available_table(
+    sheets_service,
+    spreadsheet_id: str,
+    tab_names: Sequence[str],
+) -> Tuple[List[str], List[Dict[str, str]], str]:
+    for tab_name in tab_names:
+        if not tab_exists(sheets_service, spreadsheet_id, tab_name):
+            continue
+        headers, rows = read_table(sheets_service, spreadsheet_id, tab_name)
+        return headers, rows, tab_name
+    return [], [], ""
+
+
+def _copy_rows(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [dict(row) for row in rows if any(normalize_text(value) for value in row.values())]
+
+
+def _headers_union(*header_groups: Sequence[str]) -> List[str]:
+    headers: List[str] = []
+    for group in header_groups:
+        for header in group:
+            if header not in headers:
+                headers.append(header)
+    return headers
+
+
+def _cache_status_summary(cache_rows: Sequence[Dict[str, Any]]) -> Tuple[str, int, int, int, str]:
+    counter = Counter()
+    latest_refreshed = ""
+    for row in cache_rows:
+        status = normalize_text(row.get("Cache_Status", "")).upper() or "UNKNOWN"
+        counter[status] += 1
+        refreshed = normalize_text(row.get("Last_Refreshed", ""))
+        if refreshed and refreshed > latest_refreshed:
+            latest_refreshed = refreshed
+    pending_count = counter.get("PENDING", 0)
+    success_count = counter.get("SUCCESS", 0)
+    failed_count = sum(counter.get(status, 0) for status in counter if status not in {"PENDING", "SUCCESS"})
+    if cache_rows:
+        parts = [f"{status}:{count}" for status, count in sorted(counter.items())]
+        summary = " | ".join(parts)
+    else:
+        summary = "No keyword cache rows yet"
+    return summary, pending_count, success_count, failed_count, latest_refreshed
+
+
+def build_demand_profile_looker_rows(
+    demand_headers: Sequence[str],
+    demand_rows: Sequence[Dict[str, Any]],
+    cache_rows: Sequence[Dict[str, Any]],
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    headers = _headers_union(
+        demand_headers or [
+            "Product_Type",
+            "Seasonality_Tag",
+            "Peak_Months",
+            "Prep_Start_Days_Before_Peak",
+            "Ads_Start_Days_Before_Peak",
+            "Total_Avg_Monthly_Searches",
+            "Demand_Stability",
+            "Seasonality_Score",
+            "Current_Month_Demand_Index",
+            "Next_45_Days_Demand_Status",
+            "Demand_Confidence",
+            "Demand_Source",
+            "Recommended_Ad_Window",
+            "Remarks",
+            "Last_Updated",
+        ],
+        [
+            "Keyword_Count",
+            "Cache_Status_Summary",
+            "Cache_Pending_Count",
+            "Cache_Success_Count",
+            "Cache_Failed_Count",
+            "Cache_Last_Refreshed",
+        ],
+    )
+    grouped_cache: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for row in cache_rows:
+        product_type = normalize_text(row.get("Product_Type", ""))
+        if product_type:
+            grouped_cache[product_type].append(dict(row))
+
+    output_rows: List[Dict[str, Any]] = []
+    for row in demand_rows:
+        merged = dict(row)
+        product_type = normalize_text(row.get("Product_Type", ""))
+        related_cache = grouped_cache.get(product_type, [])
+        summary, pending_count, success_count, failed_count, latest_refreshed = _cache_status_summary(related_cache)
+        merged.update(
+            {
+                "Keyword_Count": str(len(related_cache)),
+                "Cache_Status_Summary": summary,
+                "Cache_Pending_Count": str(pending_count),
+                "Cache_Success_Count": str(success_count),
+                "Cache_Failed_Count": str(failed_count),
+                "Cache_Last_Refreshed": latest_refreshed,
+            }
+        )
+        output_rows.append(merged)
+
+    return headers, output_rows
+
+
+def build_run_quality_looker_rows(
+    score_headers: Sequence[str],
+    score_rows: Sequence[Dict[str, Any]],
+    breakdown_headers: Sequence[str],
+    breakdown_rows: Sequence[Dict[str, Any]],
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    headers = _headers_union(
+        [
+            "Record_Type",
+            "Report_Date",
+            "Run_ID",
+            "Overall_Run_Quality_Score",
+            "Run_Quality_Grade",
+            "Decision_Recommendation",
+            "Score_Category",
+            "Score_Name",
+            "Max_Points",
+            "Points_Earned",
+            "Status",
+            "Reason",
+            "Suggested_Action",
+            "Last_Updated",
+        ],
+        score_headers,
+        breakdown_headers,
+    )
+    summary_rows = [dict(row) for row in score_rows if any(normalize_text(value) for value in row.values())]
+    breakdown_source_rows = [dict(row) for row in breakdown_rows if any(normalize_text(value) for value in row.values())]
+    latest_summary = dict(summary_rows[-1]) if summary_rows else {}
+
+    output_rows: List[Dict[str, Any]] = []
+    for row in summary_rows:
+        output_rows.append(
+            {
+                "Record_Type": "Summary",
+                "Report_Date": normalize_text(row.get("Report_Date", "")),
+                "Run_ID": normalize_text(row.get("Run_ID", "")),
+                "Overall_Run_Quality_Score": normalize_text(row.get("Overall_Run_Quality_Score", "")),
+                "Run_Quality_Grade": normalize_text(row.get("Run_Quality_Grade", "")),
+                "Decision_Recommendation": normalize_text(row.get("Decision_Recommendation", "")),
+                "Suggested_Action": normalize_text(row.get("Suggested_Action", "")),
+                "Last_Updated": normalize_text(row.get("Last_Updated", "")),
+            }
+        )
+
+    for row in breakdown_source_rows:
+        output_rows.append(
+            {
+                "Record_Type": "Breakdown",
+                "Report_Date": normalize_text(latest_summary.get("Report_Date", "")),
+                "Run_ID": normalize_text(row.get("Run_ID", "")) or normalize_text(latest_summary.get("Run_ID", "")),
+                "Overall_Run_Quality_Score": normalize_text(latest_summary.get("Overall_Run_Quality_Score", "")),
+                "Run_Quality_Grade": normalize_text(latest_summary.get("Run_Quality_Grade", "")),
+                "Decision_Recommendation": normalize_text(latest_summary.get("Decision_Recommendation", "")),
+                "Score_Category": normalize_text(row.get("Score_Category", "")),
+                "Score_Name": normalize_text(row.get("Score_Name", "")),
+                "Max_Points": normalize_text(row.get("Max_Points", "")),
+                "Points_Earned": normalize_text(row.get("Points_Earned", "")),
+                "Status": normalize_text(row.get("Status", "")),
+                "Reason": normalize_text(row.get("Reason", "")),
+                "Suggested_Action": normalize_text(row.get("Suggested_Action", "")),
+                "Last_Updated": normalize_text(row.get("Last_Updated", "")),
+            }
+        )
+
+    return headers, output_rows
+
+
+def build_copy_rows(
+    primary_tab_name: str,
+    fallback_tab_names: Sequence[str],
+    sheets_service,
+    spreadsheet_id: str,
+) -> Tuple[List[str], List[Dict[str, Any]], str]:
+    headers, rows, source_tab = read_first_available_table(sheets_service, spreadsheet_id, (primary_tab_name, *fallback_tab_names))
+    return headers, _copy_rows(rows), source_tab
+
+
+def _quota_limited_warning_result(spreadsheet_id: str) -> Dict[str, Any]:
+    return {
+        "status": "WARNING",
+        "spreadsheet_id": spreadsheet_id,
+        "message": "Sheets quota exceeded; wait 5 minutes and rerun",
+        "next_action": "wait 5 minutes and rerun",
+        "warnings": ["Sheets quota exceeded"],
+        "tabs_updated": [],
+        "row_counts": {},
+        "source_tabs_checked": SOURCE_TABS,
+        "log_path": str(LOG_PATH),
+    }
+
+
 def create_looker_studio_sources() -> Dict[str, Any]:
     ensure_directories()
     if not SPREADSHEET_META_PATH.exists():
@@ -873,150 +1106,241 @@ def create_looker_studio_sources() -> Dict[str, Any]:
     spreadsheet_id = meta["spreadsheet_id"]
     sheets_service, _, _ = build_services()
 
-    for tab_name in SOURCE_TABS:
-        ensure_required_tab_exists(sheets_service, spreadsheet_id, tab_name)
+    try:
+        for tab_name in SOURCE_TABS:
+            ensure_required_tab_exists(sheets_service, spreadsheet_id, tab_name)
 
-    dashboard_data_headers, dashboard_data_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_DASHBOARD_DATA")
-    analysis_headers, analysis_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_SKU_ANALYSIS")
-    alerts_headers, alerts_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ALERTS_GENERATED")
-    active_tasks_headers, active_tasks_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ACTIVE_TASKS")
-    tracker_headers, tracker_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ACTION_TRACKER")
-    ads_headers, ads_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ADS_PLANNER")
-    return_headers, return_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_RETURN_ISSUE_SUMMARY")
-    listing_headers, listing_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_LISTING_PRESENCE")
-    missing_listing_headers, missing_listing_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_MISSING_ACTIVE_LISTINGS")
-    run_history_headers, run_history_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_RUN_HISTORY")
-    fsn_history_headers, fsn_history_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_FSN_HISTORY")
+        dashboard_data_headers, dashboard_data_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_DASHBOARD_DATA")
+        analysis_headers, analysis_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_SKU_ANALYSIS")
+        alerts_headers, alerts_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ALERTS_GENERATED")
+        active_tasks_headers, active_tasks_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ACTIVE_TASKS")
+        tracker_headers, tracker_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ACTION_TRACKER")
+        ads_headers, ads_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ADS_PLANNER")
+        return_headers, return_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_RETURN_ISSUE_SUMMARY")
+        listing_headers, listing_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_LISTING_PRESENCE")
+        missing_listing_headers, missing_listing_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_MISSING_ACTIVE_LISTINGS")
+        run_history_headers, run_history_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_RUN_HISTORY")
+        fsn_history_headers, fsn_history_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_FSN_HISTORY")
 
-    latest_run_row = get_latest_run_row(run_history_rows)
-    latest_run_id = latest_text_value(latest_run_row, "Run_ID")
-    report_date = latest_text_value(latest_run_row, "Report_End_Date", "Run_Date") or datetime.now().date().isoformat()
+        latest_run_row = get_latest_run_row(run_history_rows)
+        latest_run_id = latest_text_value(latest_run_row, "Run_ID")
+        report_date = latest_text_value(latest_run_row, "Report_End_Date", "Run_Date") or datetime.now().date().isoformat()
 
-    analysis_lookup = build_index(analysis_rows, key_field="FSN")
-    listing_lookup = build_index(listing_rows, key_field="FSN")
-    missing_listing_lookup = build_index(missing_listing_rows, key_field="FSN")
-    ads_lookup = build_index(ads_rows, key_field="FSN")
-    return_lookup = build_index(return_rows, key_field="FSN")
-    dashboard_lookup = build_dashboard_lookup(dashboard_data_rows)
+        analysis_lookup = build_index(analysis_rows, key_field="FSN")
+        listing_lookup = build_index(listing_rows, key_field="FSN")
+        missing_listing_lookup = build_index(missing_listing_rows, key_field="FSN")
+        ads_lookup = build_index(ads_rows, key_field="FSN")
+        return_lookup = build_index(return_rows, key_field="FSN")
+        dashboard_lookup = build_dashboard_lookup(dashboard_data_rows)
 
-    analysis_fsns = [clean_fsn(row.get("FSN", "")) for row in analysis_rows if clean_fsn(row.get("FSN", ""))]
-    total_target_fsns = len(dict.fromkeys(analysis_fsns))
-    total_alerts = len([row for row in alerts_rows if normalize_text(row.get("Alert_ID", "")) or clean_fsn(row.get("FSN", ""))])
-    critical_alerts = count_severity(alerts_rows, "Critical")
-    high_alerts = count_severity(alerts_rows, "High")
-    active_tasks = len([row for row in active_tasks_rows if normalize_text(row.get("Alert_ID", "")) or clean_fsn(row.get("FSN", ""))])
-    missing_cogs = sum(1 for row in analysis_rows if clean_fsn(row.get("FSN", "")) and not is_cogs_available(row))
-    missing_active_listings = len([row for row in missing_listing_rows if clean_fsn(row.get("FSN", ""))])
-    ads_ready_count = count_ads_ready(ads_rows)
-    return_issue_fsns = len([row for row in return_rows if clean_fsn(row.get("FSN", ""))])
-    cogs_available, cogs_missing = count_cogs_rows(analysis_rows)
-    cogs_completion_percent = round((cogs_available / (cogs_available + cogs_missing)) * 100, 2) if (cogs_available + cogs_missing) else 0.0
+        analysis_fsns = [clean_fsn(row.get("FSN", "")) for row in analysis_rows if clean_fsn(row.get("FSN", ""))]
+        total_target_fsns = len(dict.fromkeys(analysis_fsns))
+        total_alerts = len([row for row in alerts_rows if normalize_text(row.get("Alert_ID", "")) or clean_fsn(row.get("FSN", ""))])
+        critical_alerts = count_severity(alerts_rows, "Critical")
+        high_alerts = count_severity(alerts_rows, "High")
+        active_tasks = len([row for row in active_tasks_rows if normalize_text(row.get("Alert_ID", "")) or clean_fsn(row.get("FSN", ""))])
+        missing_cogs = sum(1 for row in analysis_rows if clean_fsn(row.get("FSN", "")) and not is_cogs_available(row))
+        missing_active_listings = len([row for row in missing_listing_rows if clean_fsn(row.get("FSN", ""))])
+        ads_ready_count = count_ads_ready(ads_rows)
+        return_issue_fsns = len([row for row in return_rows if clean_fsn(row.get("FSN", ""))])
+        cogs_available, cogs_missing = count_cogs_rows(analysis_rows)
+        cogs_completion_percent = round((cogs_available / (cogs_available + cogs_missing)) * 100, 2) if (cogs_available + cogs_missing) else 0.0
 
-    final_profit = 0.0
-    for row in analysis_rows:
-        if not clean_fsn(row.get("FSN", "")):
-            continue
-        value = normalize_text(row.get("Final_Net_Profit", ""))
-        if value:
-            final_profit += parse_float(value)
-            continue
-        total_cogs_value = normalize_text(row.get("Total_COGS", ""))
-        if total_cogs_value:
-            final_profit += parse_float(row.get("Net_Profit_Before_COGS", "")) - parse_float(total_cogs_value)
+        final_profit = 0.0
+        for row in analysis_rows:
+            if not clean_fsn(row.get("FSN", "")):
+                continue
+            value = normalize_text(row.get("Final_Net_Profit", ""))
+            if value:
+                final_profit += parse_float(value)
+                continue
+            total_cogs_value = normalize_text(row.get("Total_COGS", ""))
+            if total_cogs_value:
+                final_profit += parse_float(row.get("Net_Profit_Before_COGS", "")) - parse_float(total_cogs_value)
 
-    context = {
-        "run_id": latest_run_id,
-        "report_date": report_date,
-        "total_target_fsns": total_target_fsns or len(analysis_lookup),
-        "final_profit": final_profit,
-        "total_alerts": total_alerts,
-        "critical_alerts": critical_alerts,
-        "high_alerts": high_alerts,
-        "active_tasks": active_tasks,
-        "missing_cogs": missing_cogs,
-        "missing_active_listings": missing_active_listings,
-        "ads_ready_count": ads_ready_count,
-        "return_issue_fsns": return_issue_fsns,
-        "cogs_completion_percent": cogs_completion_percent,
-    }
+        context = {
+            "run_id": latest_run_id,
+            "report_date": report_date,
+            "total_target_fsns": total_target_fsns or len(analysis_lookup),
+            "final_profit": final_profit,
+            "total_alerts": total_alerts,
+            "critical_alerts": critical_alerts,
+            "high_alerts": high_alerts,
+            "active_tasks": active_tasks,
+            "missing_cogs": missing_cogs,
+            "missing_active_listings": missing_active_listings,
+            "ads_ready_count": ads_ready_count,
+            "return_issue_fsns": return_issue_fsns,
+            "cogs_completion_percent": cogs_completion_percent,
+        }
 
-    executive_rows = build_executive_summary_rows(context, dashboard_lookup)
-    fsn_metric_rows = build_fsn_metrics_rows(
-        analysis_rows,
-        listing_lookup,
-        missing_listing_lookup,
-        ads_lookup,
-        return_lookup,
-        latest_run_id,
-    )
-    alert_rows = build_alert_rows(alerts_rows, latest_run_id)
-    action_rows = build_action_rows(tracker_rows)
-    ads_source_rows = build_ads_rows(ads_rows)
-    return_source_rows = build_returns_rows(return_rows)
-    listing_source_rows = build_listings_rows(listing_rows, missing_listing_rows)
+        executive_rows = build_executive_summary_rows(context, dashboard_lookup)
+        fsn_metric_rows = build_fsn_metrics_rows(
+            analysis_rows,
+            listing_lookup,
+            missing_listing_lookup,
+            ads_lookup,
+            return_lookup,
+            latest_run_id,
+        )
+        alert_rows = build_alert_rows(alerts_rows, latest_run_id)
+        action_rows = build_action_rows(tracker_rows)
+        ads_source_rows = build_ads_rows(ads_rows)
+        return_source_rows = build_returns_rows(return_rows)
+        listing_source_rows = build_listings_rows(listing_rows, missing_listing_rows)
+        adjusted_profit_headers, adjusted_profit_rows, _ = build_copy_rows(
+            "FLIPKART_ADJUSTED_PROFIT",
+            [LOOKER_ADJUSTED_PROFIT_TAB],
+            sheets_service,
+            spreadsheet_id,
+        )
+        run_comparison_headers, run_comparison_rows, _ = build_copy_rows(
+            "FLIPKART_RUN_COMPARISON",
+            [],
+            sheets_service,
+            spreadsheet_id,
+        )
+        report_format_headers, report_format_rows, _ = build_copy_rows(
+            "FLIPKART_REPORT_FORMAT_MONITOR",
+            [LOOKER_REPORT_FORMAT_MONITOR_TAB],
+            sheets_service,
+            spreadsheet_id,
+        )
+        module_confidence_headers, module_confidence_rows, _ = build_copy_rows(
+            "FLIPKART_MODULE_CONFIDENCE",
+            [],
+            sheets_service,
+            spreadsheet_id,
+        )
+        competitor_headers, competitor_rows, _ = build_copy_rows(
+            "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
+            [],
+            sheets_service,
+            spreadsheet_id,
+        )
+        demand_headers, demand_rows = read_table(sheets_service, spreadsheet_id, "PRODUCT_TYPE_DEMAND_PROFILE")
+        keyword_cache_headers, keyword_cache_rows = read_optional_table(sheets_service, spreadsheet_id, "GOOGLE_KEYWORD_METRICS_CACHE")
+        run_quality_score_headers, run_quality_score_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_RUN_QUALITY_SCORE")
+        run_quality_breakdown_headers, run_quality_breakdown_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_RUN_QUALITY_BREAKDOWN")
+        looker_run_quality_headers, looker_run_quality_rows = build_run_quality_looker_rows(
+            run_quality_score_headers,
+            run_quality_score_rows,
+            run_quality_breakdown_headers,
+            run_quality_breakdown_rows,
+        )
+        demand_looker_headers, demand_looker_rows = build_demand_profile_looker_rows(
+            demand_headers,
+            demand_rows,
+            keyword_cache_rows,
+        )
 
-    output_payloads = {
-        LOOKER_EXECUTIVE_TAB: executive_rows,
-        LOOKER_FSN_METRICS_TAB: fsn_metric_rows,
-        LOOKER_ALERTS_TAB: alert_rows,
-        LOOKER_ACTIONS_TAB: action_rows,
-        LOOKER_ADS_TAB: ads_source_rows,
-        LOOKER_RETURNS_TAB: return_source_rows,
-        LOOKER_LISTINGS_TAB: listing_source_rows,
-    }
+        output_payloads = {
+            LOOKER_EXECUTIVE_TAB: executive_rows,
+            LOOKER_FSN_METRICS_TAB: fsn_metric_rows,
+            LOOKER_ALERTS_TAB: alert_rows,
+            LOOKER_ACTIONS_TAB: action_rows,
+            LOOKER_ADS_TAB: ads_source_rows,
+            LOOKER_RETURNS_TAB: return_source_rows,
+            LOOKER_LISTINGS_TAB: listing_source_rows,
+        }
 
-    for tab_name, rows in output_payloads.items():
-        write_output_tab(sheets_service, spreadsheet_id, tab_name, LOOKER_HEADERS[tab_name], rows)
+        for tab_name, rows in output_payloads.items():
+            write_output_tab(sheets_service, spreadsheet_id, tab_name, LOOKER_HEADERS[tab_name], rows)
 
-    result = {
-        "status": "SUCCESS",
-        "spreadsheet_id": spreadsheet_id,
-        "run_id": latest_run_id,
-        "report_date": report_date,
-        "tabs_updated": LOOKER_TABS,
-        "row_counts": {tab_name: len(rows) for tab_name, rows in output_payloads.items()},
-        "source_tabs_checked": SOURCE_TABS,
-        "log_path": str(LOG_PATH),
-    }
+        looker_extension_payloads = {
+            LOOKER_RUN_COMPARISON_TAB: (run_comparison_headers, run_comparison_rows),
+            LOOKER_ADJUSTED_PROFIT_TAB: (adjusted_profit_headers, adjusted_profit_rows),
+            LOOKER_REPORT_FORMAT_MONITOR_TAB: (report_format_headers, report_format_rows),
+            LOOKER_RUN_QUALITY_TAB: (looker_run_quality_headers, looker_run_quality_rows),
+            LOOKER_MODULE_CONFIDENCE_TAB: (module_confidence_headers, module_confidence_rows),
+            LOOKER_DEMAND_PROFILE_TAB: (demand_looker_headers, demand_looker_rows),
+            LOOKER_COMPETITOR_INTELLIGENCE_TAB: (competitor_headers, competitor_rows),
+        }
 
-    append_csv_log(
-        LOG_PATH,
-        [
-            "timestamp",
-            "spreadsheet_id",
-            "run_id",
-            "report_date",
-            "executive_rows",
-            "fsn_metric_rows",
-            "alert_rows",
-            "action_rows",
-            "ads_rows",
-            "return_rows",
-            "listing_rows",
-            "status",
-            "message",
-        ],
-        [
-            {
-                "timestamp": now_iso(),
-                "spreadsheet_id": spreadsheet_id,
-                "run_id": latest_run_id,
-                "report_date": report_date,
-                "executive_rows": len(executive_rows),
-                "fsn_metric_rows": len(fsn_metric_rows),
-                "alert_rows": len(alert_rows),
-                "action_rows": len(action_rows),
-                "ads_rows": len(ads_source_rows),
-                "return_rows": len(return_source_rows),
-                "listing_rows": len(listing_source_rows),
-                "status": "SUCCESS",
-                "message": "Rebuilt Looker Studio source tabs for Flipkart",
-            }
-        ],
-    )
+        for tab_name, (headers, rows) in looker_extension_payloads.items():
+            write_output_tab(sheets_service, spreadsheet_id, tab_name, headers, rows)
 
-    print(json.dumps(build_status_payload("SUCCESS", **{k: v for k, v in result.items() if k != "status"}), indent=2, ensure_ascii=False))
-    return result
+        result = {
+            "status": "SUCCESS",
+            "spreadsheet_id": spreadsheet_id,
+            "run_id": latest_run_id,
+            "report_date": report_date,
+            "tabs_updated": LOOKER_TABS,
+            "row_counts": {
+                **{tab_name: len(rows) for tab_name, rows in output_payloads.items()},
+                **{tab_name: len(rows) for tab_name, (_, rows) in looker_extension_payloads.items()},
+            },
+            "source_tabs_checked": SOURCE_TABS,
+            "log_path": str(LOG_PATH),
+        }
+
+        append_csv_log(
+            LOG_PATH,
+            [
+                "timestamp",
+                "spreadsheet_id",
+                "run_id",
+                "report_date",
+                "executive_rows",
+                "fsn_metric_rows",
+                "alert_rows",
+                "action_rows",
+                "ads_rows",
+                "return_rows",
+                "listing_rows",
+                "status",
+                "message",
+            ],
+            [
+                {
+                    "timestamp": now_iso(),
+                    "spreadsheet_id": spreadsheet_id,
+                    "run_id": latest_run_id,
+                    "report_date": report_date,
+                    "executive_rows": len(executive_rows),
+                    "fsn_metric_rows": len(fsn_metric_rows),
+                    "alert_rows": len(alert_rows),
+                    "action_rows": len(action_rows),
+                    "ads_rows": len(ads_source_rows),
+                    "return_rows": len(return_source_rows),
+                    "listing_rows": len(listing_source_rows),
+                    "status": "SUCCESS",
+                    "message": "Rebuilt Looker Studio source tabs for Flipkart",
+                }
+            ],
+        )
+
+        print(json.dumps(build_status_payload("SUCCESS", **{k: v for k, v in result.items() if k != "status"}), indent=2, ensure_ascii=False))
+        return result
+    except HttpError as exc:
+        status = getattr(exc.resp, "status", None)
+        message = str(exc)
+        if status == 429 or "quota" in message.lower() or "rate_limit" in message.lower():
+            warning_result = _quota_limited_warning_result(spreadsheet_id)
+            append_csv_log(
+                LOG_PATH,
+                ["timestamp", "spreadsheet_id", "run_id", "report_date", "executive_rows", "fsn_metric_rows", "alert_rows", "action_rows", "ads_rows", "return_rows", "listing_rows", "status", "message"],
+                [
+                    {
+                        "timestamp": now_iso(),
+                        "spreadsheet_id": spreadsheet_id,
+                        "run_id": "",
+                        "report_date": "",
+                        "executive_rows": 0,
+                        "fsn_metric_rows": 0,
+                        "alert_rows": 0,
+                        "action_rows": 0,
+                        "ads_rows": 0,
+                        "return_rows": 0,
+                        "listing_rows": 0,
+                        "status": "WARNING",
+                        "message": warning_result["message"],
+                    }
+                ],
+            )
+            print(json.dumps(build_status_payload("WARNING", **{k: v for k, v in warning_result.items() if k != "status"}), indent=2, ensure_ascii=False))
+            return warning_result
+        raise
 
 
 def main() -> None:

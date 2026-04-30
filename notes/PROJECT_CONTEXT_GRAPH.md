@@ -147,12 +147,15 @@ Phase 23 - Flipkart Adjustment Ledger
 - Latest Upgrade 5 verification result: `status=PASS`
 
 ## Next Phase
-Upgrade 10 - Flipkart-only Visual Competitor Intelligence
+Integration Phase - Wire Upgrades 5-10 into the operating refresh flow and Looker source layer
 
 ## Current Focus
-Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, and Upgrade 8 module-wise data confidence is complete and verified.
-- Upgrade 10 visual competitor intelligence code is now in place: `config/visual_search_template.env`, `src/integrations/visual_search/visual_search_config.py`, `src/integrations/visual_search/search_google_lens_flipkart_only.py`, `src/marketplaces/flipkart/create_flipkart_competitor_search_queue.py`, `src/marketplaces/flipkart/run_flipkart_visual_competitor_search.py`, `src/marketplaces/flipkart/create_flipkart_competitor_price_intelligence.py`, and `src/marketplaces/flipkart/verify_flipkart_competitor_intelligence.py`
-- Upgrade 10 stays optional, cached, Flipkart-only, and ad-ready FSN only; it does not touch `MASTER_SKU`, the full pipeline, core P&L calculations, prices, or ads decisions
+Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, Upgrade 8 module-wise data confidence is complete and verified, Upgrade 9 Google Keyword Planner integration is fallback-safe, and Upgrade 10 live visual competitor search is verified.
+- Upgrade 10 live result: `SerpApi visual search calls used this month=8`, `safe remaining calls=192`, `visual_result_rows=51`, `flipkart_only_url_violations=0`
+- Upgrade 10 verification result: `competitor intelligence verification=PASS`
+- Upgrade 10 risk distribution: `Critical=2`, `Medium=4`, `Not Enough Data=11`
+- Upgrade 10 suggested actions: `Do Not Scale Ads=2`, `Test Ads Carefully=4`, `Need Competitor Data=11`
+- Upgrade 10 stays optional, cached, Flipkart-only, and ad-ready FSN only; it does not touch `MASTER_SKU`, the full pipeline, core P&L calculations, prices, ads decisions, or any other marketplace
 - Upgrade 10 local outputs now include `flipkart_competitor_search_queue.csv`, `flipkart_visual_competitor_results.csv`, `flipkart_competitor_price_intelligence.csv`, and `looker_flipkart_competitor_intelligence.csv`
 - Upgrade 6 implementation files are now in place: `src/marketplaces/flipkart/create_flipkart_report_format_baseline.py`, `src/marketplaces/flipkart/check_flipkart_report_format_drift.py`, and `src/marketplaces/flipkart/verify_flipkart_report_format_monitor.py`
 - The remaining safe next step is a known-good baseline capture followed by recurring drift checks, not a full Flipkart pipeline rerun
@@ -166,14 +169,16 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Upgrade 8 verification result: `status=PASS`
 - Upgrade 9 result: Google Keyword Planner API interface built in fallback-safe mode
 - Upgrade 9 result: Google Ads Basic Access approval is pending
-- Upgrade 9 result: `keyword_seed_rows=26`, `keyword_cache_rows=26`, `cache_status_distribution=Pending 26`
+- Upgrade 9 result: cache fallback works
+- Upgrade 9 result: `keyword_cache_rows=26`, `cache_status_distribution=Pending 26`
 - Upgrade 9 result: `PRODUCT_TYPE_DEMAND_PROFILE rows=7`
 - Upgrade 9 verification result: `update_product_type_demand_profile status=SUCCESS_WITH_WARNINGS`
 - Upgrade 9 verification result: `verify_google_keyword_metrics_cache status=PASS_WITH_WARNINGS`, warning=`CACHE_EMPTY`
-- Upgrade 10 implementation is now in place; optional credentialed verification is next if needed
-- Upgrade 10 scope: optional and cached competitor lookup, Flipkart.com URLs only, no aggressive scraping, no `MASTER_SKU`, no other marketplaces, no core P&L changes, no auto price changes, no auto ads changes without clear output
 - Upgrade 10 quota guard now uses a local usage ledger at `data/logs/marketplaces/flipkart/visual_search_usage_log.csv`
 - Upgrade 10 must start with Scale Ads + Test Ads FSNs only
+- Integration Phase scope: wire Upgrades 5-10 into the operating refresh flow and Looker source layer
+- Integration Phase rules: do not run the full Flipkart pipeline, do not call Google Ads API by default, do not call SerpApi or Google Lens by default, do not touch `MASTER_SKU`, do not touch other marketplaces, do not auto-change prices, do not auto-change ad budgets, do not wipe manual tabs, and only rebuild generated output tabs
+- Integration Phase rules: external API refreshes stay manual and on-demand only
 
 ### Latest Flipkart Status
 - Flipkart Run Control System is complete and verified
@@ -287,11 +292,13 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Latest Stage 10 control fix: manual-tab preservation check now matches the live tracker tab shape and returns `true`
 
 ### Next Task
-- Upgrade 10 implementation is locally added; the next optional step is a credentialed local verification run if `credentials/visual_search.env` is supplied
+- Wire Upgrades 5-10 into the operating refresh flow and Looker source layer
 - Keep the competitor lookup optional and cached
+- Keep Google Keyword Planner cache-backed unless the user explicitly requests a live refresh
+- Keep visual search and Google Ads API refreshes manual and on-demand only
 - Keep URLs Flipkart-only and skip other marketplaces
 - Start with Scale Ads + Test Ads FSNs only
-- Enforce the 200-search safe monthly limit before live calls
+- Enforce the safe monthly limit before any live visual-search calls
 - Do not run the full Flipkart pipeline
 - Do not scrape Flipkart aggressively
 - Do not touch `MASTER_SKU`
@@ -452,7 +459,7 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Do not touch `MASTER_SKU`
 - Do not touch other marketplaces
 - Keep the score layer separate from business recalculation
-- Upgrade 8 is complete and verified; the next user-directed slice is `Upgrade 9 - Google Keyword Planner API Interface`
+- Upgrade 8 is complete and verified; the next user-directed slice is the Integration Phase that wires Upgrades 5-10 into the operating refresh flow and Looker source layer
 
 ### V2 Guardrails
 - Keep Flipkart v1 untouched

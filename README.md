@@ -173,40 +173,40 @@ python -m src.marketplaces.flipkart.update_flipkart_ads_recommendations
 python -m src.marketplaces.flipkart.verify_flipkart_ads_recommendations
 ```
 
-Google Keyword Planner API setup:
-1. Do not paste credentials in chat.
-2. Put real Google Ads API credentials in `credentials/google_ads.yaml`, or point `GOOGLE_ADS_CONFIG_PATH` at another local YAML file.
-3. If you need a starting point, copy `config/google_ads_template.yaml` and replace the placeholder values locally.
-4. Run:
+Integration phase refresh:
 ```powershell
-python -m src.integrations.google_ads.test_google_ads_api_access
-```
-5. If the test returns `SUCCESS`, refresh the cache and demand profile:
-```powershell
-python -m src.marketplaces.flipkart.refresh_google_keyword_metrics --max-keywords 5
-python -m src.marketplaces.flipkart.update_product_type_demand_profile
-python -m src.marketplaces.flipkart.verify_google_keyword_metrics_cache
-```
-6. If the test returns `NEEDS_CREDENTIALS`, create `credentials/google_ads.yaml` from `config/google_ads_template.yaml`.
-7. If the test returns `API_ACCESS_NOT_READY`, confirm Basic Access and Keyword Planning permissible use in the Google Ads API center.
-8. Keep this monthly/on-demand only. Do not wire it into the full Flipkart wrapper or the dashboard refresh flow yet.
-
-Flipkart visual competitor intelligence:
-```powershell
-python -m src.marketplaces.flipkart.create_flipkart_competitor_search_queue
-python -m src.marketplaces.flipkart.run_flipkart_visual_competitor_search --max-fsns 5
-python -m src.marketplaces.flipkart.create_flipkart_competitor_price_intelligence
-python -m src.marketplaces.flipkart.verify_flipkart_competitor_intelligence
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --sleep-seconds 5 --health-delay-seconds 30
 ```
 
-Noob-friendly SOP:
-1. Run the queue builder first.
-2. If `Product_Image_URL` is blank, fill it only when you have a safe local image URL.
-3. If you want visual search later, copy `config/visual_search_template.env` to `credentials/visual_search.env` and fill in the real key locally.
-4. Run visual search with `--max-fsns 5`.
-5. Run price intelligence after the visual results exist.
-6. Run the verifier.
-7. Do not auto-change prices or ads decisions; review `Suggested_Action` manually.
+Default safe refresh does NOT call:
+- Google Ads API
+- SerpApi / Google Lens
+
+Manual keyword refresh:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --refresh-keywords --sleep-seconds 5
+```
+
+Manual visual competitor search:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --run-visual-search --visual-max-fsns 5 --sleep-seconds 5
+```
+
+Drive archive sync:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --sync-drive-archive
+```
+
+Full debug verification:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --verify-all --sleep-seconds 5
+```
+
+Notes:
+- Use `--refresh-keywords` only when Google Ads credentials are ready.
+- If Google Ads access is pending, the refresh returns `WARNING` and leaves the cache path safe.
+- Use `--run-visual-search` only when the visual search credentials and image URLs are ready.
+- If visual search credentials or image URLs are missing, the refresh returns `WARNING` and skips the paid search call.
 
 Stage 9 listing presence workflow:
 ```powershell
@@ -329,6 +329,21 @@ A. When raw Flipkart reports change:
 Default post-analysis refresh command:
 ```powershell
 python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --sleep-seconds 5 --health-delay-seconds 30
+```
+
+Manual keyword refresh:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --refresh-keywords --sleep-seconds 5
+```
+
+Manual visual competitor search:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --run-visual-search --visual-max-fsns 5 --sleep-seconds 5
+```
+
+Drive archive sync:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --sync-drive-archive
 ```
 
 Detailed post-analysis verification command:

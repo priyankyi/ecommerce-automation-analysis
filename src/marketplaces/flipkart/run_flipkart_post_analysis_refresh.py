@@ -21,6 +21,8 @@ LOG_HEADERS = [
     "log_path",
 ]
 
+_RUNNER_VISUAL_MAX_FSNS = 5
+
 STEP_TAB_MAP: Dict[str, List[str]] = {
     "update_flipkart_profit_after_cogs": ["FLIPKART_SKU_ANALYSIS"],
     "create_flipkart_return_comments_analysis": ["FLIPKART_RETURN_COMMENTS", "FLIPKART_RETURN_ISSUE_SUMMARY", "FLIPKART_RETURN_REASON_PIVOT"],
@@ -28,9 +30,35 @@ STEP_TAB_MAP: Dict[str, List[str]] = {
     "create_flipkart_ads_mapping": ["FLIPKART_ADS_MASTER", "FLIPKART_ADS_MAPPING_ISSUES", "FLIPKART_ADS_SUMMARY_BY_FSN", "FLIPKART_ADS_PLANNER"],
     "update_flipkart_ads_recommendations": ["FLIPKART_ADS_PLANNER"],
     "create_flipkart_listing_presence_workflow": ["FLIPKART_LISTING_PRESENCE", "FLIPKART_MISSING_ACTIVE_LISTINGS", "FLIPKART_LISTING_STATUS_ISSUES", "FLIPKART_SKU_ANALYSIS"],
+    "create_flipkart_adjustment_ledger": ["FLIPKART_ADJUSTMENTS_LEDGER"],
+    "apply_flipkart_adjustments": ["FLIPKART_ADJUSTMENTS_LEDGER", "FLIPKART_ADJUSTED_PROFIT", "LOOKER_FLIPKART_ADJUSTED_PROFIT", "FLIPKART_SKU_ANALYSIS"],
+    "check_flipkart_report_format_drift": ["FLIPKART_REPORT_FORMAT_MONITOR", "FLIPKART_REPORT_FORMAT_ISSUES", "LOOKER_FLIPKART_REPORT_FORMAT_MONITOR"],
     "create_flipkart_alerts_and_tasks": ["FLIPKART_ALERTS_GENERATED", "FLIPKART_ACTION_TRACKER", "FLIPKART_ACTIVE_TASKS"],
     "create_flipkart_dashboard": ["FLIPKART_DASHBOARD", "FLIPKART_DASHBOARD_DATA", "FLIPKART_TOP_ALERTS", "FLIPKART_TOP_RETURN_ISSUES", "FLIPKART_ACTION_SUMMARY"],
     "create_flipkart_fsn_drilldown": ["FLIPKART_FSN_DRILLDOWN"],
+    "create_flipkart_run_comparison": ["FLIPKART_RUN_COMPARISON", "FLIPKART_FSN_RUN_COMPARISON", "LOOKER_FLIPKART_RUN_COMPARISON"],
+    "create_flipkart_run_quality_score": ["FLIPKART_RUN_QUALITY_SCORE", "FLIPKART_RUN_QUALITY_BREAKDOWN", "LOOKER_FLIPKART_RUN_QUALITY_SCORE"],
+    "create_flipkart_module_confidence": ["FLIPKART_MODULE_CONFIDENCE", "FLIPKART_DATA_GAP_SUMMARY", "LOOKER_FLIPKART_MODULE_CONFIDENCE"],
+    "refresh_google_keyword_metrics": ["GOOGLE_ADS_KEYWORD_SEEDS", "GOOGLE_KEYWORD_METRICS_CACHE", "PRODUCT_TYPE_DEMAND_PROFILE"],
+    "update_product_type_demand_profile": ["PRODUCT_TYPE_DEMAND_PROFILE"],
+    "run_flipkart_visual_competitor_search": ["FLIPKART_COMPETITOR_SEARCH_QUEUE", "FLIPKART_VISUAL_COMPETITOR_RESULTS"],
+    "create_flipkart_competitor_price_intelligence": ["FLIPKART_COMPETITOR_PRICE_INTELLIGENCE", "LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE"],
+    "create_looker_studio_sources": [
+        "LOOKER_FLIPKART_EXECUTIVE_SUMMARY",
+        "LOOKER_FLIPKART_FSN_METRICS",
+        "LOOKER_FLIPKART_ALERTS",
+        "LOOKER_FLIPKART_ACTIONS",
+        "LOOKER_FLIPKART_ADS",
+        "LOOKER_FLIPKART_RETURNS",
+        "LOOKER_FLIPKART_LISTINGS",
+        "LOOKER_FLIPKART_RUN_COMPARISON",
+        "LOOKER_FLIPKART_ADJUSTED_PROFIT",
+        "LOOKER_FLIPKART_REPORT_FORMAT_MONITOR",
+        "LOOKER_FLIPKART_RUN_QUALITY_SCORE",
+        "LOOKER_FLIPKART_MODULE_CONFIDENCE",
+        "LOOKER_FLIPKART_DEMAND_PROFILE",
+        "LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE",
+    ],
 }
 
 STEP_MODULES: Dict[str, str] = {
@@ -40,9 +68,21 @@ STEP_MODULES: Dict[str, str] = {
     "create_flipkart_ads_mapping": "src.marketplaces.flipkart.create_flipkart_ads_mapping",
     "update_flipkart_ads_recommendations": "src.marketplaces.flipkart.update_flipkart_ads_recommendations",
     "create_flipkart_listing_presence_workflow": "src.marketplaces.flipkart.create_flipkart_listing_presence_workflow",
+    "create_flipkart_adjustment_ledger": "src.marketplaces.flipkart.create_flipkart_adjustment_ledger",
+    "apply_flipkart_adjustments": "src.marketplaces.flipkart.apply_flipkart_adjustments",
+    "check_flipkart_report_format_drift": "src.marketplaces.flipkart.check_flipkart_report_format_drift",
     "create_flipkart_alerts_and_tasks": "src.marketplaces.flipkart.create_flipkart_alerts_and_tasks",
     "create_flipkart_dashboard": "src.marketplaces.flipkart.create_flipkart_dashboard",
     "create_flipkart_fsn_drilldown": "src.marketplaces.flipkart.create_flipkart_fsn_drilldown",
+    "create_flipkart_run_comparison": "src.marketplaces.flipkart.create_flipkart_run_comparison",
+    "create_flipkart_run_quality_score": "src.marketplaces.flipkart.create_flipkart_run_quality_score",
+    "create_flipkart_module_confidence": "src.marketplaces.flipkart.create_flipkart_module_confidence",
+    "refresh_google_keyword_metrics": "src.marketplaces.flipkart.refresh_google_keyword_metrics",
+    "update_product_type_demand_profile": "src.marketplaces.flipkart.update_product_type_demand_profile",
+    "run_flipkart_visual_competitor_search": "src.marketplaces.flipkart.run_flipkart_visual_competitor_search",
+    "create_flipkart_competitor_price_intelligence": "src.marketplaces.flipkart.create_flipkart_competitor_price_intelligence",
+    "create_looker_studio_sources": "src.marketplaces.flipkart.create_looker_studio_sources",
+    "sync_flipkart_run_archive_to_drive": "src.marketplaces.flipkart.sync_flipkart_run_archive_to_drive",
     "verify_flipkart_cogs_layer": "src.marketplaces.flipkart.verify_flipkart_cogs_layer",
     "verify_flipkart_alerts_tasks": "src.marketplaces.flipkart.verify_flipkart_alerts_tasks",
     "verify_flipkart_return_comments_analysis": "src.marketplaces.flipkart.verify_flipkart_return_comments_analysis",
@@ -50,6 +90,15 @@ STEP_MODULES: Dict[str, str] = {
     "verify_flipkart_ads_mapping": "src.marketplaces.flipkart.verify_flipkart_ads_mapping",
     "verify_flipkart_ads_recommendations": "src.marketplaces.flipkart.verify_flipkart_ads_recommendations",
     "verify_flipkart_listing_presence_workflow": "src.marketplaces.flipkart.verify_flipkart_listing_presence_workflow",
+    "verify_flipkart_adjustment_ledger": "src.marketplaces.flipkart.verify_flipkart_adjustment_ledger",
+    "verify_flipkart_report_format_monitor": "src.marketplaces.flipkart.verify_flipkart_report_format_monitor",
+    "verify_flipkart_run_comparison": "src.marketplaces.flipkart.verify_flipkart_run_comparison",
+    "verify_flipkart_run_quality_score": "src.marketplaces.flipkart.verify_flipkart_run_quality_score",
+    "verify_flipkart_module_confidence": "src.marketplaces.flipkart.verify_flipkart_module_confidence",
+    "verify_google_keyword_metrics_cache": "src.marketplaces.flipkart.verify_google_keyword_metrics_cache",
+    "verify_flipkart_competitor_intelligence": "src.marketplaces.flipkart.verify_flipkart_competitor_intelligence",
+    "verify_looker_studio_sources": "src.marketplaces.flipkart.verify_looker_studio_sources",
+    "verify_flipkart_integration_layer": "src.marketplaces.flipkart.verify_flipkart_integration_layer",
 }
 HEALTH_CHECK_MODULE = "src.marketplaces.flipkart.verify_flipkart_system_health"
 
@@ -60,9 +109,18 @@ STEP_ORDER: List[str] = [
     "create_flipkart_ads_mapping",
     "update_flipkart_ads_recommendations",
     "create_flipkart_listing_presence_workflow",
+    "create_flipkart_adjustment_ledger",
+    "apply_flipkart_adjustments",
+    "check_flipkart_report_format_drift",
     "create_flipkart_alerts_and_tasks",
     "create_flipkart_dashboard",
     "create_flipkart_fsn_drilldown",
+    "create_flipkart_run_comparison",
+    "create_flipkart_run_quality_score",
+    "create_flipkart_module_confidence",
+    "update_product_type_demand_profile",
+    "create_flipkart_competitor_price_intelligence",
+    "create_looker_studio_sources",
 ]
 
 HEALTH_CHECK_STEP = "verify_flipkart_system_health"
@@ -74,10 +132,34 @@ DETAILED_VERIFY_STEPS: List[str] = [
     "verify_flipkart_ads_mapping",
     "verify_flipkart_ads_recommendations",
     "verify_flipkart_listing_presence_workflow",
+    "verify_flipkart_adjustment_ledger",
+    "verify_flipkart_report_format_monitor",
+    "verify_flipkart_run_comparison",
+    "verify_flipkart_run_quality_score",
+    "verify_flipkart_module_confidence",
+    "verify_google_keyword_metrics_cache",
+    "verify_flipkart_competitor_intelligence",
+    "verify_looker_studio_sources",
+    "verify_flipkart_integration_layer",
 ]
 OPTIONAL_DETAILED_VERIFY_STEPS: List[str] = [
     "verify_flipkart_return_issue_integration",
 ]
+
+OPTIONAL_EXTERNAL_STEPS = {
+    "refresh_google_keyword_metrics",
+    "run_flipkart_visual_competitor_search",
+}
+
+WARNING_STATUSES = {
+    "WARNING",
+    "PASS_WITH_WARNINGS",
+    "SUCCESS_WITH_WARNINGS",
+    "API_ACCESS_NOT_READY",
+    "NEEDS_CREDENTIALS",
+    "QUOTA_GUARD_STOPPED",
+    "RETRY_LATER",
+}
 
 MANUAL_COLUMNS: Dict[str, Sequence[str]] = {
     "FLIPKART_ACTION_TRACKER": (
@@ -109,8 +191,10 @@ def _append_log_row(payload: Dict[str, Any]) -> None:
 
 def _step_expected_status(step_name: str) -> Sequence[str]:
     if step_name == HEALTH_CHECK_STEP or step_name.startswith("verify_"):
-        return ("PASS", "WARNING", "RETRY_LATER")
-    return ("SUCCESS",)
+        return ("PASS", "PASS_WITH_WARNINGS", "WARNING", "RETRY_LATER")
+    if step_name in OPTIONAL_EXTERNAL_STEPS:
+        return ("SUCCESS", "SUCCESS_WITH_WARNINGS", "WARNING", "API_ACCESS_NOT_READY", "NEEDS_CREDENTIALS", "QUOTA_GUARD_STOPPED", "NO_PENDING_ROWS")
+    return ("SUCCESS", "SUCCESS_WITH_WARNINGS")
 
 
 def _is_google_sheets_429(message: str) -> bool:
@@ -118,7 +202,36 @@ def _is_google_sheets_429(message: str) -> bool:
     return "429" in normalized and "google" in normalized and "sheet" in normalized
 
 
+def _is_quota_limited_message(message: str) -> bool:
+    normalized = message.lower()
+    return any(
+        token in normalized
+        for token in (
+            "quota exceeded",
+            "rate_limit_exceeded",
+            "read requests per minute",
+            "quota_limited",
+        )
+    ) or _is_google_sheets_429(message)
+
+
 def _verification_warning_payload(step_name: str, payload: Dict[str, Any]) -> Dict[str, Any] | None:
+    if step_name == "refresh_google_keyword_metrics":
+        status_value = str(payload.get("status", "")).upper()
+        if status_value == "API_ACCESS_NOT_READY":
+            warning_payload = dict(payload)
+            warning_payload["status"] = "WARNING"
+            warning_payload["message"] = "Google Ads API access pending"
+            warning_payload["warning_type"] = "external_api_pending"
+            return warning_payload
+    if step_name == "run_flipkart_visual_competitor_search":
+        status_value = str(payload.get("status", "")).upper()
+        if status_value == "NEEDS_CREDENTIALS":
+            warning_payload = dict(payload)
+            warning_payload["status"] = "WARNING"
+            warning_payload["message"] = "visual search credentials/image URLs missing"
+            warning_payload["warning_type"] = "external_api_pending"
+            return warning_payload
     if step_name != HEALTH_CHECK_STEP and not step_name.startswith("verify_"):
         return None
     if str(payload.get("status", "")).upper() == "RETRY_LATER":
@@ -146,6 +259,76 @@ def _build_detailed_verify_steps() -> List[str]:
         if step_name in STEP_MODULES:
             detailed_steps.append(step_name)
     return detailed_steps
+
+
+def _build_step_order(
+    *,
+    refresh_keywords: bool,
+    run_visual_search: bool,
+    sync_drive_archive: bool,
+) -> List[str]:
+    step_names = list(STEP_ORDER)
+    if refresh_keywords:
+        insert_at = step_names.index("update_product_type_demand_profile")
+        step_names.insert(insert_at, "refresh_google_keyword_metrics")
+    if run_visual_search:
+        insert_at = step_names.index("create_flipkart_competitor_price_intelligence")
+        step_names.insert(insert_at, "run_flipkart_visual_competitor_search")
+    if sync_drive_archive:
+        step_names.append("sync_flipkart_run_archive_to_drive")
+    return step_names
+
+
+def _build_execution_schedule(
+    *,
+    refresh_keywords: bool,
+    run_visual_search: bool,
+    sync_drive_archive: bool,
+    verify_all: bool,
+    skip_verification: bool,
+    health_delay_seconds: float,
+) -> List[str]:
+    step_names = _build_step_order(
+        refresh_keywords=refresh_keywords,
+        run_visual_search=run_visual_search,
+        sync_drive_archive=sync_drive_archive,
+    )
+    if not skip_verification:
+        if health_delay_seconds > 0:
+            step_names.append("__health_delay__")
+        if verify_all:
+            step_names.extend(_build_detailed_verify_steps())
+        step_names.append(HEALTH_CHECK_STEP)
+    return step_names
+
+
+def _is_warning_payload(step_name: str, payload: Dict[str, Any]) -> bool:
+    status_value = str(payload.get("status", "")).upper()
+    if status_value in {"WARNING", "PASS_WITH_WARNINGS", "SUCCESS_WITH_WARNINGS"}:
+        return True
+    if step_name == HEALTH_CHECK_STEP and status_value == "PASS":
+        warnings = payload.get("warnings", [])
+        return bool(warnings)
+    return False
+
+
+def _warning_message(step_name: str, payload: Dict[str, Any]) -> str:
+    if step_name == "refresh_google_keyword_metrics":
+        return str(payload.get("message", "")) or "Google Ads API access pending"
+    if step_name == "run_flipkart_visual_competitor_search":
+        return str(payload.get("message", "")) or "visual search credentials/image URLs missing"
+    if step_name == HEALTH_CHECK_STEP:
+        warnings = payload.get("warnings", [])
+        if isinstance(warnings, list) and warnings:
+            return " | ".join(str(item) for item in warnings if str(item))
+    warnings = payload.get("warnings", [])
+    if isinstance(warnings, list) and warnings:
+        return " | ".join(str(item) for item in warnings if str(item))
+    return str(payload.get("message", "")) or f"{step_name} completed with warnings"
+
+
+def _allowed_warning_step(step_name: str) -> bool:
+    return step_name in OPTIONAL_EXTERNAL_STEPS or step_name == HEALTH_CHECK_STEP
 
 
 def _resolve_step_module_name(step_name: str) -> str:
@@ -189,13 +372,16 @@ def _get_sheet_headers_batch(spreadsheet_id: str, tab_names: Sequence[str]) -> D
 def _run_step_subprocess(step_name: str) -> Dict[str, Any]:
     module_name = _resolve_step_module_name(step_name)
     repo_root = Path(__file__).resolve().parents[3]
+    extra_args: List[str] = []
+    if step_name == "run_flipkart_visual_competitor_search":
+        extra_args = ["--max-fsns", str(_RUNNER_VISUAL_MAX_FSNS)]
     with TemporaryDirectory(prefix=f"{step_name}_") as temp_dir:
         temp_path = Path(temp_dir)
         stdout_path = temp_path / "stdout.txt"
         stderr_path = temp_path / "stderr.txt"
         with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
             completed = subprocess.run(
-                [sys.executable, "-m", module_name],
+                [sys.executable, "-m", module_name, *extra_args],
                 cwd=str(repo_root),
                 stdout=stdout_handle,
                 stderr=stderr_handle,
@@ -246,6 +432,10 @@ def _load_spreadsheet_id() -> str:
 
 def run_flipkart_post_analysis_refresh(
     *,
+    refresh_keywords: bool = False,
+    run_visual_search: bool = False,
+    visual_max_fsns: int = 5,
+    sync_drive_archive: bool = False,
     verify_all: bool = False,
     skip_verification: bool = False,
     sleep_seconds: float = 0.0,
@@ -253,21 +443,26 @@ def run_flipkart_post_analysis_refresh(
 ) -> Dict[str, Any]:
     ensure_directories()
     spreadsheet_id = _load_spreadsheet_id()
+    global _RUNNER_VISUAL_MAX_FSNS
+    _RUNNER_VISUAL_MAX_FSNS = max(0, int(visual_max_fsns))
 
+    step_names = _build_execution_schedule(
+        refresh_keywords=refresh_keywords,
+        run_visual_search=run_visual_search,
+        sync_drive_archive=sync_drive_archive,
+        verify_all=verify_all,
+        skip_verification=skip_verification,
+        health_delay_seconds=health_delay_seconds,
+    )
     detailed_verify_steps = _build_detailed_verify_steps()
-    step_names = list(STEP_ORDER)
-    if not skip_verification:
-        if health_delay_seconds > 0:
-            step_names.append("__health_delay__")
-        if verify_all:
-            step_names.extend(detailed_verify_steps)
-        step_names.append(HEALTH_CHECK_STEP)
 
     step_payloads: Dict[str, Dict[str, Any]] = {}
     steps_run: List[str] = []
     failed_step: str | None = None
     failure_exc: BaseException | None = None
     health_payload: Dict[str, Any] | None = None
+    warning_messages: List[str] = []
+    quota_warning_present = False
 
     for index, step_name in enumerate(step_names):
         if step_name == "__health_delay__":
@@ -281,12 +476,10 @@ def run_flipkart_post_analysis_refresh(
             returncode = int(payload.get("__returncode", 0) or 0)
             if step_name == HEALTH_CHECK_STEP:
                 health_payload = payload
-                if status_value == "WARNING":
-                    failed_step = "quota_limited_verification"
-                    break
-                if status_value == "RETRY_LATER" or _is_google_sheets_429(str(payload.get("message", ""))):
-                    failed_step = "quota_limited_verification"
-                    break
+                if status_value in WARNING_STATUSES or _is_google_sheets_429(str(payload.get("message", ""))):
+                    warning_messages.append(_warning_message(step_name, payload))
+                    quota_warning_present = quota_warning_present or _is_google_sheets_429(str(payload.get("message", "")))
+                    continue
                 if status_value != "PASS" or returncode != 0:
                     failed_step = HEALTH_CHECK_STEP
                     if status_value and status_value != "PASS":
@@ -295,10 +488,19 @@ def run_flipkart_post_analysis_refresh(
                         failure_exc = RuntimeError(payload.get("__stderr", f"{step_name} returned non-zero exit code"))
                     break
                 continue
-            if status_value == "WARNING":
-                failed_step = "quota_limited_verification"
-                break
+            if status_value in WARNING_STATUSES:
+                warning_messages.append(_warning_message(step_name, payload))
+                quota_warning_present = quota_warning_present or _is_quota_limited_message(str(payload.get("message", "")))
+                continue
+            if _is_quota_limited_message(str(payload.get("message", ""))):
+                warning_messages.append("wait 5 minutes and rerun health check")
+                quota_warning_present = True
+                continue
             if status_value not in {value.upper() for value in _step_expected_status(step_name)} or returncode != 0:
+                if _is_quota_limited_message(str(payload.get("message", ""))):
+                    warning_messages.append("wait 5 minutes and rerun health check")
+                    quota_warning_present = True
+                    continue
                 failed_step = step_name
                 if status_value and status_value != "SUCCESS" and status_value != "PASS":
                     failure_exc = RuntimeError(payload.get("message", f"{step_name} failed"))
@@ -317,14 +519,20 @@ def run_flipkart_post_analysis_refresh(
         verification_steps.append(HEALTH_CHECK_STEP)
     if verify_all:
         verification_steps.extend(detailed_verify_steps)
-    verification_passed = bool(verification_steps) and all(
-        str(step_payloads.get(step, {}).get("status", "")).upper() == "PASS" for step in verification_steps
+    verification_passed = skip_verification or (
+        bool(verification_steps)
+        and all(str(step_payloads.get(step, {}).get("status", "")).upper() not in {"ERROR", "FAIL"} for step in verification_steps)
     )
-    verification_warning = any(
-        str(step_payloads.get(step, {}).get("status", "")).upper() == "WARNING" for step in verification_steps
-    )
-    manual_tabs_preserved = _validate_manual_tabs_preserved(spreadsheet_id)
-    tabs_refreshed = _ordered_tabs(STEP_ORDER, step_payloads)
+    manual_tabs_preserved = True
+    try:
+        manual_tabs_preserved = _validate_manual_tabs_preserved(spreadsheet_id)
+    except BaseException as exc:  # noqa: BLE001 - quota pressure should downgrade to warning
+        if _is_google_sheets_429(str(exc)):
+            warning_messages.append("wait 5 minutes and rerun health check")
+            quota_warning_present = True
+        else:
+            raise
+    tabs_refreshed = _ordered_tabs(step_names, step_payloads)
 
     status = "SUCCESS"
     error_type = ""
@@ -337,20 +545,19 @@ def run_flipkart_post_analysis_refresh(
         else:
             error_type = failure_exc.__class__.__name__
             message = str(failure_exc)
-    elif failed_step == "quota_limited_verification":
-        status = "WARNING"
-        verification_passed = False
-        message = "wait 5 minutes and rerun health check"
-    elif verification_warning:
-        status = "WARNING"
-        failed_step = "quota_limited_verification"
-        message = "wait 5 minutes and rerun health check"
     elif not verification_passed or not manual_tabs_preserved:
         status = "FAIL"
         if not verification_passed and not failed_step:
             failed_step = "verification_passed"
         elif not manual_tabs_preserved and not failed_step:
             failed_step = "manual_tabs_preserved"
+    elif warning_messages:
+        status = "WARNING" if quota_warning_present else "SUCCESS_WITH_WARNINGS"
+        message = warning_messages[0]
+
+    external_google_ads_called = bool(step_payloads.get("refresh_google_keyword_metrics", {}).get("api_called", False))
+    external_visual_search_called = int(step_payloads.get("run_flipkart_visual_competitor_search", {}).get("api_called_count", 0) or 0) > 0
+    drive_archive_synced = step_payloads.get("sync_flipkart_run_archive_to_drive", {}).get("status", "") in {"SUCCESS", "SUCCESS_WITH_WARNINGS"}
 
     summary = {
         "timestamp": now_iso(),
@@ -359,6 +566,10 @@ def run_flipkart_post_analysis_refresh(
         "failed_step": failed_step,
         "verification_passed": verification_passed,
         "verification_skipped": skip_verification,
+        "warnings": warning_messages,
+        "external_google_ads_called": external_google_ads_called,
+        "external_visual_search_called": external_visual_search_called,
+        "drive_archive_synced": drive_archive_synced,
         "tabs_refreshed": tabs_refreshed,
         "manual_tabs_preserved": manual_tabs_preserved,
         "log_path": str(LOG_PATH),
@@ -381,6 +592,10 @@ def run_flipkart_post_analysis_refresh(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Flipkart post-analysis refresh steps.")
+    parser.add_argument("--refresh-keywords", action="store_true", help="Refresh Google Keyword Planner cache before rebuilding the demand profile.")
+    parser.add_argument("--run-visual-search", action="store_true", help="Run Flipkart visual competitor search before competitor intelligence.")
+    parser.add_argument("--visual-max-fsns", type=int, default=5, help="Maximum FSNs to send through visual competitor search.")
+    parser.add_argument("--sync-drive-archive", action="store_true", help="Sync the latest Flipkart run archive to Google Drive after refresh steps.")
     parser.add_argument("--verify-all", action="store_true", help="Run detailed Flipkart verification scripts after the default refresh flow.")
     parser.add_argument("--skip-verification", action="store_true", help="Skip post-refresh verification and run refresh modules only.")
     parser.add_argument("--sleep-seconds", type=float, default=0.0, help="Pause between subprocess steps to reduce Google Sheets quota pressure.")
@@ -389,13 +604,17 @@ def main() -> None:
 
     try:
         summary = run_flipkart_post_analysis_refresh(
+            refresh_keywords=args.refresh_keywords,
+            run_visual_search=args.run_visual_search,
+            visual_max_fsns=max(0, args.visual_max_fsns),
+            sync_drive_archive=args.sync_drive_archive,
             verify_all=args.verify_all,
             skip_verification=args.skip_verification,
             sleep_seconds=max(0.0, args.sleep_seconds),
             health_delay_seconds=max(0.0, args.health_delay_seconds),
         )
         print(_json_text(summary))
-        if summary["status"] not in {"SUCCESS", "WARNING"}:
+        if summary["status"] not in {"SUCCESS", "WARNING", "SUCCESS_WITH_WARNINGS"}:
             raise SystemExit(1)
     except Exception as exc:
         error_payload = {
