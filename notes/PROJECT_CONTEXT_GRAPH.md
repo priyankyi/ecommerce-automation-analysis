@@ -182,8 +182,71 @@ Phase 27 - Streamlit UX Cleanup + Order Item Explorer
 - `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick`
 - `python -m src.safety.check_repo_safety`
 
+## Next Requested Phase
+Phase 28 - Raw Input Cycle Safety Guard
+
+### Goal
+Make monthly Flipkart raw report replacement noob-proof by keeping the active raw folder clean and blocking unsafe full refreshes before mixed-cycle inputs can pollute analysis or history tabs.
+
+### Current Live Status
+- Streamlit Cloud dashboard is live and connected at `https://sparkworld-flipkart-control-tower.streamlit.app/`
+- Dashboard auth mode is `Streamlit Secrets`
+- Spreadsheet ID source is `Streamlit Secrets`
+- Spreadsheet connected is `Yes`
+- Tabs loaded are `20/20`
+- Dashboard readability and `Order ID Explorer` are live
+- Streamlit is now the primary operating dashboard
+- Looker Studio is optional and secondary
+
+### Raw Input Rule
+- `data/input/marketplaces/flipkart/raw` must contain only the current reporting cycle files
+- `data/input/marketplaces/flipkart/archive/YYYY-MM` must hold old raw files by month or cycle
+- Old and new raw reports must never be mixed in the active raw folder
+- Old raw files should be moved to archive, not deleted immediately
+
+### Safety Concerns
+- Mixed-cycle raw inputs can pollute analysis
+- Reusing the same raw files can pollute `FLIPKART_RUN_HISTORY`, `FLIPKART_FSN_HISTORY`, `FLIPKART_RUN_COMPARISON`, and `FLIPKART_FSN_RUN_COMPARISON`
+- Full refresh must check raw input safety first
+- Quick mode must remain unblocked
+
+### Next Deliverables
+1. Raw input safety checker
+2. Raw input manifest CSV
+3. PowerShell wrapper
+4. Integration into full refresh mode
+5. Team SOP update
+6. Clear JSON result showing whether full refresh is safe
+
+### Guard Rules
+- Block full refresh if the raw folder is empty
+- Block full refresh if old and new files are mixed
+- Block full refresh if duplicate files exist
+- Block full refresh if too many unknown report files exist
+- Block full refresh if the same input manifest was already used in the latest run
+- Block full refresh if the report cycle appears inconsistent
+- Allow full refresh only with explicit `--force-raw-refresh`
+- Do not run the full Flipkart pipeline during the guard check
+- Do not call Google Ads API
+- Do not call SerpApi
+- Do not touch `MASTER_SKU`
+- Do not touch other marketplaces
+- Do not expose credentials
+- Do not commit raw data or credentials
+
+### Expected Output
+- The guard should return a machine-readable JSON result with safe/unsafe status and the reason list
+- The result should be easy for the team to use before deciding whether to run a full monthly refresh
+
+### Current Status
+- The raw input safety guard is implemented locally for Flipkart full refresh mode
+- `src/marketplaces/flipkart/check_flipkart_raw_input_safety.py` writes `flipkart_raw_input_manifest.csv` and `flipkart_latest_raw_input_manifest.json`
+- `run_flipkart_post_analysis_refresh.py` now checks raw input safety before any full refresh steps and only allows bypass with explicit `--force-raw-refresh`
+- `docs/FLIPKART_TEAM_SOP.md`, `docs/COMMAND_INDEX.md`, and `README.md` now point operators to the safety check before monthly full refresh
+- Latest local checker result is `BLOCKED` with `raw_file_count=10`, `duplicate_file_count=0`, `same_manifest_as_previous_run=true`, and a mixed-cycle warning on the `orders` category spanning `2026-04-28` and `2026-04-29`
+
 ## Current Focus
-Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, Upgrade 8 module-wise data confidence is complete and verified, Upgrade 9 Google Keyword Planner integration is fallback-safe, and Upgrade 10 live visual competitor search is verified.
+- Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, Upgrade 8 module-wise data confidence is complete and verified, Upgrade 9 Google Keyword Planner integration is fallback-safe, and Upgrade 10 live visual competitor search is verified
 - Streamlit is now the primary dashboard path for daily operations; Looker Studio is optional and secondary
 - Streamlit Community Cloud is the primary hosting option so the dashboard works even when the local PC is switched off
 - Streamlit dashboard app exists at `src/dashboard/flipkart_streamlit_app.py`
@@ -191,7 +254,7 @@ Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is comp
 - Wrapper launch command is `python -m streamlit run src/dashboard/flipkart_streamlit_app.py`
 - Dashboard pages in scope: `Executive Overview`, `Alerts & Actions`, `Profit & COGS`, `Ads Planner`, `Competitor Risk`, `Data Quality`, `Returns Intelligence`, `Return Comments Explorer`, `Order ID Explorer`, `FSN Deep Dive`, `Listing Issues`, `Run History & Comparison`, and `Raw Data Explorer / Downloads`
 - Dashboard is read-only against Google Sheets generated/source tabs and never writes back from Streamlit
-- Dashboard reads dashboard source tabs only and must not depend on local credentials/ folders in hosted mode
+- Dashboard reads dashboard source tabs only and must not depend on local credentials/folders in hosted mode
 - App must support Streamlit Cloud secrets while still working locally
 - Keep warnings visible only for spreadsheet disconnects, missing tabs, and quota issues in the production sidebar; hide auth internals unless `DASHBOARD_DEBUG=true`
 - Streamlit UX cleanup plus order-item explorer support is complete and verified; the dashboard remains read-only, Flipkart-only, and source-driven

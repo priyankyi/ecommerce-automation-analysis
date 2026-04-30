@@ -50,16 +50,7 @@ Use:
 
 ## 5. Monthly full report process
 
-Use this only after replacing the monthly raw reports.
-
-Steps:
-1. Download the latest Flipkart reports
-2. Replace files in `data/input/marketplaces/flipkart/raw`
-3. Run the report format drift check
-4. Run the full safe refresh
-5. Run the health check
-6. Sync the run archive to Google Drive
-7. Commit code only if code changed, not data
+Use the `Monthly Raw File Replacement SOP` in section 12 before any full refresh.
 
 ## 6. COGS update process
 
@@ -115,3 +106,27 @@ Then run:
 - Credentials are local only
 - Do not delete the `credentials` folder
 
+## 12. Monthly Raw File Replacement SOP
+
+This is the safest way to replace raw Flipkart files each month.
+
+1. Open `data/input/marketplaces/flipkart/raw`
+2. Move old files to `data/input/marketplaces/flipkart/archive/YYYY-MM`
+3. Paste only the current cycle files into `data/input/marketplaces/flipkart/raw`
+4. Run:
+
+```powershell
+.\check_flipkart_raw_input_safety.ps1
+```
+
+5. If the result is `PASS` or `PASS_WITH_WARNINGS`, run:
+
+```powershell
+.\run_flipkart_full_safe_refresh.ps1
+```
+
+6. If the result is `BLOCKED`, do not run full refresh
+7. Read `next_action`
+8. Fix the raw folder first
+9. Never keep old and new report files mixed in the raw folder
+10. Do not delete raw files immediately; archive them

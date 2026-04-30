@@ -241,6 +241,11 @@ Only health check:
 python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode health-only
 ```
 
+Raw input safety check:
+```powershell
+.\check_flipkart_raw_input_safety.ps1
+```
+
 Full safe refresh:
 ```powershell
 python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode full --sleep-seconds 5 --health-delay-seconds 30
@@ -249,6 +254,8 @@ python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode fu
 Default quick refresh does NOT call:
 - Google Ads API
 - SerpApi / Google Lens
+
+Run `.\check_flipkart_raw_input_safety.ps1` before the monthly full refresh.
 
 Stage 9 listing presence workflow:
 ```powershell

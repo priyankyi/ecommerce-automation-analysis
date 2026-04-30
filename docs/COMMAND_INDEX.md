@@ -18,6 +18,12 @@
 .\run_flipkart_health_check.ps1
 ```
 
+## Raw input safety check
+
+```powershell
+.\check_flipkart_raw_input_safety.ps1
+```
+
 ## COGS-only refresh
 
 ```powershell
@@ -66,4 +72,3 @@ git push
 ```
 
 Do not commit credentials, token files, or raw report data.
-

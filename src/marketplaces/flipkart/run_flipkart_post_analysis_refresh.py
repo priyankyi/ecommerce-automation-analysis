@@ -501,6 +501,17 @@ def _load_spreadsheet_id() -> str:
     return json.loads(meta_path.read_text(encoding="utf-8"))["spreadsheet_id"]
 
 
+def _run_raw_input_safety_check() -> Dict[str, Any]:
+    module = importlib.import_module("src.marketplaces.flipkart.check_flipkart_raw_input_safety")
+    checker = getattr(module, "check_flipkart_raw_input_safety", None)
+    if checker is None:
+        raise AttributeError("src.marketplaces.flipkart.check_flipkart_raw_input_safety does not expose check_flipkart_raw_input_safety()")
+    result = checker()
+    if not isinstance(result, dict):
+        raise RuntimeError("check_flipkart_raw_input_safety() returned a non-dict payload")
+    return result
+
+
 def run_flipkart_post_analysis_refresh(
     *,
     mode: str = "quick",
@@ -512,11 +523,55 @@ def run_flipkart_post_analysis_refresh(
     skip_verification: bool = False,
     sleep_seconds: float = 0.0,
     health_delay_seconds: float = 0.0,
+    force_raw_refresh: bool = False,
 ) -> Dict[str, Any]:
-    ensure_directories()
-    spreadsheet_id = _load_spreadsheet_id()
     global _RUNNER_VISUAL_MAX_FSNS
     _RUNNER_VISUAL_MAX_FSNS = max(0, int(visual_max_fsns))
+
+    raw_input_safety_result: Dict[str, Any] | None = None
+    raw_input_safety_warning: str | None = None
+    if mode == "full":
+        raw_input_safety_result = _run_raw_input_safety_check()
+        safe_to_run_full_refresh = bool(raw_input_safety_result.get("safe_to_run_full_refresh", False))
+        if not safe_to_run_full_refresh and not force_raw_refresh:
+            blocked_summary = {
+                "timestamp": now_iso(),
+                "mode": mode,
+                "status": "BLOCKED",
+                "steps_run": [],
+                "failed_step": "check_flipkart_raw_input_safety",
+                "safe_to_run_full_refresh": False,
+                "warnings": list(raw_input_safety_result.get("warnings", [])),
+                "next_action": raw_input_safety_result.get("next_action", ""),
+                "external_google_ads_called": False,
+                "external_visual_search_called": False,
+                "manual_tabs_preserved": True,
+                "verification_passed": True,
+                "verification_skipped": True,
+                "tabs_refreshed": [],
+                "drive_archive_synced": False,
+                "raw_input_safety_result": raw_input_safety_result,
+                "log_path": str(LOG_PATH),
+            }
+            if raw_input_safety_result.get("same_manifest_as_previous_run") or raw_input_safety_result.get("same_manifest_as_latest_run"):
+                blocked_summary["warnings"].append("Current raw manifest matches a previously used manifest.")
+            _append_log_row(
+                {
+                    "timestamp": blocked_summary["timestamp"],
+                    "status": blocked_summary["status"],
+                    "step_name": blocked_summary["failed_step"],
+                    "details": json.dumps({k: v for k, v in blocked_summary.items() if k != "timestamp"}, ensure_ascii=False),
+                    "log_path": str(LOG_PATH),
+                }
+            )
+            return blocked_summary
+        if not safe_to_run_full_refresh and force_raw_refresh:
+            raw_input_safety_warning = "Raw input safety was bypassed by --force-raw-refresh"
+        ensure_directories()
+        spreadsheet_id = _load_spreadsheet_id()
+    else:
+        ensure_directories()
+        spreadsheet_id = _load_spreadsheet_id()
 
     step_names = _build_execution_schedule(
         mode=mode,
@@ -536,6 +591,12 @@ def run_flipkart_post_analysis_refresh(
     health_payload: Dict[str, Any] | None = None
     warning_messages: List[str] = []
     quota_warning_present = False
+
+    if raw_input_safety_result is not None:
+        raw_input_safety_warnings = [str(item) for item in raw_input_safety_result.get("warnings", []) if str(item)]
+        warning_messages.extend(raw_input_safety_warnings)
+        if raw_input_safety_warning:
+            warning_messages.append(raw_input_safety_warning)
 
     for index, step_name in enumerate(step_names):
         if step_name == "__health_delay__":
@@ -634,6 +695,7 @@ def run_flipkart_post_analysis_refresh(
         "status": status,
         "steps_run": steps_run,
         "failed_step": failed_step,
+        "safe_to_run_full_refresh": None if raw_input_safety_result is None else bool(raw_input_safety_result.get("safe_to_run_full_refresh", False)),
         "verification_passed": verification_passed,
         "verification_skipped": skip_verification,
         "warnings": warning_messages,
@@ -642,6 +704,7 @@ def run_flipkart_post_analysis_refresh(
         "drive_archive_synced": drive_archive_synced,
         "tabs_refreshed": tabs_refreshed,
         "manual_tabs_preserved": manual_tabs_preserved,
+        "raw_input_safety_result": raw_input_safety_result,
         "log_path": str(LOG_PATH),
     }
     if error_type:
@@ -669,6 +732,7 @@ def main() -> None:
     parser.add_argument("--sync-drive-archive", action="store_true", help="Sync the latest Flipkart run archive to Google Drive after refresh steps.")
     parser.add_argument("--verify-all", action="store_true", help="Run detailed Flipkart verification scripts after the default refresh flow.")
     parser.add_argument("--skip-verification", action="store_true", help="Skip post-refresh verification and run refresh modules only.")
+    parser.add_argument("--force-raw-refresh", action="store_true", help="Bypass the raw input safety guard for full refresh mode only.")
     parser.add_argument("--sleep-seconds", type=float, default=0.0, help="Pause between subprocess steps to reduce Google Sheets quota pressure.")
     parser.add_argument("--health-delay-seconds", type=float, default=0.0, help="Pause before the health check or detailed verification steps.")
     args = parser.parse_args()
@@ -684,6 +748,7 @@ def main() -> None:
             skip_verification=args.skip_verification,
             sleep_seconds=max(0.0, args.sleep_seconds),
             health_delay_seconds=max(0.0, args.health_delay_seconds),
+            force_raw_refresh=args.force_raw_refresh,
         )
         print(_json_text(summary))
         if summary["status"] not in {"SUCCESS", "WARNING", "SUCCESS_WITH_WARNINGS"}:
