@@ -25,6 +25,7 @@ READONLY_SCOPES = [
 ]
 SERVICE_ACCOUNT_SECRET_KEY = "gcp_service_account"
 SPREADSHEET_ID_SECRET_KEY = "MASTER_SPREADSHEET_ID"
+DASHBOARD_DEBUG_KEY = "DASHBOARD_DEBUG"
 REQUIRED_SERVICE_ACCOUNT_KEYS = {
     "type",
     "project_id",
@@ -64,6 +65,20 @@ def _safe_secrets() -> Dict[str, Any]:
         return dict(st.secrets)
     except Exception:
         return {}
+
+
+def _is_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    return text in {"1", "true", "yes", "on"}
+
+
+def resolve_dashboard_debug_mode() -> bool:
+    secrets = _safe_secrets()
+    secret_value = secrets.get(DASHBOARD_DEBUG_KEY)
+    env_value = os.environ.get(DASHBOARD_DEBUG_KEY)
+    return _is_truthy(env_value) or _is_truthy(secret_value)
 
 
 def _to_plain_dict(secret_value: Any) -> Dict[str, Any] | None:
@@ -324,6 +339,7 @@ def load_dashboard_payload() -> Dict[str, Any]:
         "spreadsheet_id": "",
         "spreadsheet_id_source": "",
         "auth_mode": "Local",
+        "dashboard_debug": resolve_dashboard_debug_mode(),
         "streamlit_secrets_available": bool(secrets),
         "service_account_block_found": service_account_found,
         "gcp_service_account_found": service_account_found,

@@ -561,14 +561,11 @@ def render_warning_banner(message: str) -> None:
 def display_status_strip(data: Dict[str, Any]) -> None:
     loaded_tabs = len(SOURCE_TABS) - len(data.get("missing_tabs", []))
     status_bits = [
-        f"Auth mode: `{data.get('auth_mode', 'Local')}`",
-        f"Spreadsheet ID source: `{data.get('spreadsheet_id_source', '-')}`",
+        f"Dashboard: `{'Online' if data.get('spreadsheet_connected') else 'Degraded'}`",
         f"Spreadsheet connected: `{'Yes' if data.get('spreadsheet_connected') else 'No'}`",
         f"Last load: `{data.get('last_data_load_timestamp', '-')}`",
         f"Tabs loaded: `{loaded_tabs}/{len(SOURCE_TABS)}`",
     ]
-    if data.get("spreadsheet_id"):
-        status_bits.insert(0, f"Spreadsheet: `{data['spreadsheet_id']}`")
     if data.get("missing_tabs"):
         status_bits.append(f"Missing: `{', '.join(data['missing_tabs'])}`")
     st.caption(" | ".join(status_bits))
@@ -1656,21 +1653,24 @@ def render_sidebar(data: Dict[str, Any], default_page: str) -> tuple[str, Dict[s
         load_dashboard_payload_from_sheet.clear()
         st.rerun()
     st.sidebar.markdown("### Deployment Status")
-    st.sidebar.write(f"Auth mode: {data.get('auth_mode', 'Local')}")
-    st.sidebar.write(f"Spreadsheet ID source: {data.get('spreadsheet_id_source', '-')}")
+    st.sidebar.write(f"Dashboard status: {'Online' if data.get('spreadsheet_connected') else 'Degraded'}")
     st.sidebar.write(f"Spreadsheet connected: {'Yes' if data.get('spreadsheet_connected') else 'No'}")
-    st.sidebar.write(f"Streamlit secrets available: {'Yes' if data.get('streamlit_secrets_available') else 'No'}")
-    st.sidebar.write(f"gcp_service_account block found: {'Yes' if data.get('gcp_service_account_found') else 'No'}")
-    st.sidebar.write(f"service account email: {data.get('service_account_email') or '-'}")
-    st.sidebar.write(f"private_key present: {'Yes' if data.get('private_key_present') else 'No'}")
-    st.sidebar.write(f"private_key starts with BEGIN: {'Yes' if data.get('private_key_starts_with_begin') else 'No'}")
-    st.sidebar.write(f"private_key ends with END: {'Yes' if data.get('private_key_ends_with_end') else 'No'}")
-    st.sidebar.write(f"auth error type: {data.get('auth_error_type') or '-'}")
-    st.sidebar.write(f"auth error message: {data.get('auth_error_message_safe') or '-'}")
-    st.sidebar.write(f"auth stage failed: {data.get('auth_stage_failed') or '-'}")
     st.sidebar.write(f"Last data load: {data.get('last_data_load_timestamp', '-')}")
-    if data.get("load_message"):
-        st.sidebar.caption(data["load_message"])
+    if data.get("dashboard_debug"):
+        st.sidebar.markdown("#### Debug")
+        st.sidebar.write(f"Streamlit secrets available: {'Yes' if data.get('streamlit_secrets_available') else 'No'}")
+        st.sidebar.write(f"gcp_service_account block found: {'Yes' if data.get('gcp_service_account_found') else 'No'}")
+        st.sidebar.write(f"service account email: {data.get('service_account_email') or '-'}")
+        st.sidebar.write(f"private_key present: {'Yes' if data.get('private_key_present') else 'No'}")
+        st.sidebar.write(f"private_key starts with BEGIN: {'Yes' if data.get('private_key_starts_with_begin') else 'No'}")
+        st.sidebar.write(f"private_key ends with END: {'Yes' if data.get('private_key_ends_with_end') else 'No'}")
+        st.sidebar.write(f"Spreadsheet ID source: {data.get('spreadsheet_id_source', '-')}")
+        st.sidebar.write(f"Auth mode: {data.get('auth_mode', 'Local')}")
+        st.sidebar.write(f"auth error type: {data.get('auth_error_type') or '-'}")
+        st.sidebar.write(f"auth error message: {data.get('auth_error_message_safe') or '-'}")
+        st.sidebar.write(f"auth stage failed: {data.get('auth_stage_failed') or '-'}")
+        if data.get("load_message"):
+            st.sidebar.caption(data["load_message"])
     page = st.sidebar.selectbox("Page", PAGE_ORDER, index=PAGE_ORDER.index(default_page))
     fsn_search = st.sidebar.text_input("FSN search", value="", placeholder="Type an FSN")
     sku_search = st.sidebar.text_input("SKU search", value="", placeholder="Type a SKU")
@@ -1681,16 +1681,6 @@ def render_sidebar(data: Dict[str, Any], default_page: str) -> tuple[str, Dict[s
 def render_global_notices(data: Dict[str, Any]) -> None:
     if data["missing_tabs"]:
         st.warning(f"Missing source tabs: {', '.join(data['missing_tabs'])}")
-    demand_df = dataframe_or_empty(data["frames"][DEMAND_PROFILE_TAB])
-    demand_status_col = resolve_column(demand_df, ["Cache_Status_Summary"])
-    if demand_status_col and count_contains(demand_df, demand_status_col, "pending") > 0:
-        st.info("Keyword cache pending: the demand profile still contains pending keyword cache rows.")
-    if not demand_df.empty and count_contains(demand_df, resolve_column(demand_df, ["Demand_Source", "Remarks"]), "basic access pending") > 0:
-        st.info("Google Ads Basic Access pending: keyword planning remains cache-backed until access is approved.")
-    competitor_df = dataframe_or_empty(data["frames"][COMPETITOR_TAB])
-    risk_col = resolve_column(competitor_df, ["Competition_Risk_Level"])
-    if risk_col and count_matching_values(competitor_df, risk_col, "Not Enough Data") > 0:
-        st.info("Competitor Not Enough Data rows are present. These rows need more search/image context before they can be treated as high-confidence signals.")
 
 
 def inject_css() -> None:
@@ -1925,7 +1915,7 @@ def run_app() -> None:
             st.error("gcp_service_account block not found in Streamlit Secrets.")
         st.stop()
     if load_status in {"missing_secrets", "sheet_error"}:
-        st.error(data.get("load_message") or "Unable to load dashboard data.")
+        st.warning(data.get("load_message") or "Unable to load dashboard data.")
         st.stop()
     if load_status == "quota_limited":
         st.warning(data.get("load_message") or "Google Sheets quota limit reached. Wait 5 minutes and refresh.")
