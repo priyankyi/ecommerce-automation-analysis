@@ -1310,7 +1310,6 @@ def create_looker_studio_sources() -> Dict[str, Any]:
             ],
         )
 
-        print(json.dumps(build_status_payload("SUCCESS", **{k: v for k, v in result.items() if k != "status"}), indent=2, ensure_ascii=False))
         return result
     except HttpError as exc:
         status = getattr(exc.resp, "status", None)
@@ -1338,14 +1337,14 @@ def create_looker_studio_sources() -> Dict[str, Any]:
                     }
                 ],
             )
-            print(json.dumps(build_status_payload("WARNING", **{k: v for k, v in warning_result.items() if k != "status"}), indent=2, ensure_ascii=False))
             return warning_result
         raise
 
 
 def main() -> None:
     try:
-        create_looker_studio_sources()
+        result = create_looker_studio_sources()
+        print(json.dumps(result, indent=2, ensure_ascii=False))
     except Exception as exc:
         print(
             json.dumps(

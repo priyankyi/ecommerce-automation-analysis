@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import subprocess
 import sys
@@ -22,6 +23,8 @@ LOG_HEADERS = [
 ]
 
 _RUNNER_VISUAL_MAX_FSNS = 5
+RUN_MODES = ("full", "quick", "looker-only", "competitor-only", "cogs-only", "actions-only", "health-only")
+IN_PROCESS_STEPS = {"create_looker_studio_sources"}
 
 STEP_TAB_MAP: Dict[str, List[str]] = {
     "update_flipkart_profit_after_cogs": ["FLIPKART_SKU_ANALYSIS"],
@@ -122,6 +125,45 @@ STEP_ORDER: List[str] = [
     "create_flipkart_competitor_price_intelligence",
     "create_looker_studio_sources",
 ]
+
+MODE_STEP_ORDER: Dict[str, List[str]] = {
+    "quick": [
+        "update_product_type_demand_profile",
+        "create_flipkart_competitor_price_intelligence",
+        "create_looker_studio_sources",
+        "verify_flipkart_integration_layer",
+        "verify_flipkart_system_health",
+    ],
+    "looker-only": [
+        "create_looker_studio_sources",
+        "verify_flipkart_integration_layer",
+    ],
+    "competitor-only": [
+        "create_flipkart_competitor_price_intelligence",
+        "create_looker_studio_sources",
+        "verify_flipkart_competitor_intelligence",
+        "verify_flipkart_integration_layer",
+    ],
+    "cogs-only": [
+        "update_flipkart_profit_after_cogs",
+        "apply_flipkart_adjustments",
+        "create_flipkart_alerts_and_tasks",
+        "create_flipkart_dashboard",
+        "create_flipkart_run_quality_score",
+        "create_flipkart_module_confidence",
+        "create_looker_studio_sources",
+        "verify_flipkart_system_health",
+    ],
+    "actions-only": [
+        "create_flipkart_alerts_and_tasks",
+        "create_flipkart_dashboard",
+        "create_looker_studio_sources",
+        "verify_flipkart_integration_layer",
+    ],
+    "health-only": [
+        "verify_flipkart_system_health",
+    ],
+}
 
 HEALTH_CHECK_STEP = "verify_flipkart_system_health"
 DETAILED_VERIFY_STEPS: List[str] = [
@@ -281,6 +323,7 @@ def _build_step_order(
 
 def _build_execution_schedule(
     *,
+    mode: str,
     refresh_keywords: bool,
     run_visual_search: bool,
     sync_drive_archive: bool,
@@ -288,17 +331,23 @@ def _build_execution_schedule(
     skip_verification: bool,
     health_delay_seconds: float,
 ) -> List[str]:
-    step_names = _build_step_order(
-        refresh_keywords=refresh_keywords,
-        run_visual_search=run_visual_search,
-        sync_drive_archive=sync_drive_archive,
-    )
-    if not skip_verification:
-        if health_delay_seconds > 0:
-            step_names.append("__health_delay__")
-        if verify_all:
-            step_names.extend(_build_detailed_verify_steps())
-        step_names.append(HEALTH_CHECK_STEP)
+    if mode == "full":
+        step_names = _build_step_order(
+            refresh_keywords=refresh_keywords,
+            run_visual_search=run_visual_search,
+            sync_drive_archive=sync_drive_archive,
+        )
+        if not skip_verification:
+            if health_delay_seconds > 0:
+                step_names.append("__health_delay__")
+            if verify_all:
+                step_names.extend(_build_detailed_verify_steps())
+            step_names.append(HEALTH_CHECK_STEP)
+        return step_names
+    step_names = list(MODE_STEP_ORDER[mode])
+    if mode == "competitor-only" and run_visual_search:
+        insert_at = step_names.index("create_flipkart_competitor_price_intelligence")
+        step_names.insert(insert_at, "run_flipkart_visual_competitor_search")
     return step_names
 
 
@@ -371,6 +420,23 @@ def _get_sheet_headers_batch(spreadsheet_id: str, tab_names: Sequence[str]) -> D
 
 def _run_step_subprocess(step_name: str) -> Dict[str, Any]:
     module_name = _resolve_step_module_name(step_name)
+    if step_name in IN_PROCESS_STEPS:
+        module = importlib.import_module(module_name)
+        step_func = getattr(module, step_name, None)
+        if step_func is None:
+            raise AttributeError(f"{module_name} does not expose {step_name}()")
+        payload = step_func()
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"{step_name} returned a non-dict payload")
+        payload = dict(payload)
+        payload["__returncode"] = 0
+        payload["__stderr"] = ""
+        warning_payload = _verification_warning_payload(step_name, payload)
+        if warning_payload is not None:
+            warning_payload["__returncode"] = 0
+            warning_payload["__stderr"] = ""
+            return warning_payload
+        return payload
     repo_root = Path(__file__).resolve().parents[3]
     extra_args: List[str] = []
     if step_name == "run_flipkart_visual_competitor_search":
@@ -432,6 +498,7 @@ def _load_spreadsheet_id() -> str:
 
 def run_flipkart_post_analysis_refresh(
     *,
+    mode: str = "quick",
     refresh_keywords: bool = False,
     run_visual_search: bool = False,
     visual_max_fsns: int = 5,
@@ -447,6 +514,7 @@ def run_flipkart_post_analysis_refresh(
     _RUNNER_VISUAL_MAX_FSNS = max(0, int(visual_max_fsns))
 
     step_names = _build_execution_schedule(
+        mode=mode,
         refresh_keywords=refresh_keywords,
         run_visual_search=run_visual_search,
         sync_drive_archive=sync_drive_archive,
@@ -515,13 +583,9 @@ def run_flipkart_post_analysis_refresh(
             time.sleep(sleep_seconds)
 
     verification_steps: List[str] = []
-    if not skip_verification:
-        verification_steps.append(HEALTH_CHECK_STEP)
-    if verify_all:
-        verification_steps.extend(detailed_verify_steps)
-    verification_passed = skip_verification or (
-        bool(verification_steps)
-        and all(str(step_payloads.get(step, {}).get("status", "")).upper() not in {"ERROR", "FAIL"} for step in verification_steps)
+    verification_steps = [step for step in step_names if step.startswith("verify_")]
+    verification_passed = not verification_steps or all(
+        str(step_payloads.get(step, {}).get("status", "")).upper() not in {"ERROR", "FAIL"} for step in verification_steps
     )
     manual_tabs_preserved = True
     try:
@@ -561,6 +625,7 @@ def run_flipkart_post_analysis_refresh(
 
     summary = {
         "timestamp": now_iso(),
+        "mode": mode,
         "status": status,
         "steps_run": steps_run,
         "failed_step": failed_step,
@@ -592,6 +657,7 @@ def run_flipkart_post_analysis_refresh(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Flipkart post-analysis refresh steps.")
+    parser.add_argument("--mode", choices=RUN_MODES, default="quick", help="Refresh mode to run. Default: quick.")
     parser.add_argument("--refresh-keywords", action="store_true", help="Refresh Google Keyword Planner cache before rebuilding the demand profile.")
     parser.add_argument("--run-visual-search", action="store_true", help="Run Flipkart visual competitor search before competitor intelligence.")
     parser.add_argument("--visual-max-fsns", type=int, default=5, help="Maximum FSNs to send through visual competitor search.")
@@ -604,6 +670,7 @@ def main() -> None:
 
     try:
         summary = run_flipkart_post_analysis_refresh(
+            mode=args.mode,
             refresh_keywords=args.refresh_keywords,
             run_visual_search=args.run_visual_search,
             visual_max_fsns=max(0, args.visual_max_fsns),

@@ -173,40 +173,39 @@ python -m src.marketplaces.flipkart.update_flipkart_ads_recommendations
 python -m src.marketplaces.flipkart.verify_flipkart_ads_recommendations
 ```
 
-Integration phase refresh:
+Fast daily refresh:
 ```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --sleep-seconds 5 --health-delay-seconds 30
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick
 ```
 
-Default safe refresh does NOT call:
+Only Looker refresh:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode looker-only
+```
+
+Only competitor refresh:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode competitor-only
+```
+
+Only COGS refresh:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode cogs-only
+```
+
+Only health check:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode health-only
+```
+
+Full safe refresh:
+```powershell
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode full --sleep-seconds 5 --health-delay-seconds 30
+```
+
+Default quick refresh does NOT call:
 - Google Ads API
 - SerpApi / Google Lens
-
-Manual keyword refresh:
-```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --refresh-keywords --sleep-seconds 5
-```
-
-Manual visual competitor search:
-```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --run-visual-search --visual-max-fsns 5 --sleep-seconds 5
-```
-
-Drive archive sync:
-```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --sync-drive-archive
-```
-
-Full debug verification:
-```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --verify-all --sleep-seconds 5
-```
-
-Notes:
-- Use `--refresh-keywords` only when Google Ads credentials are ready.
-- If Google Ads access is pending, the refresh returns `WARNING` and leaves the cache path safe.
-- Use `--run-visual-search` only when the visual search credentials and image URLs are ready.
-- If visual search credentials or image URLs are missing, the refresh returns `WARNING` and skips the paid search call.
 
 Stage 9 listing presence workflow:
 ```powershell
@@ -326,34 +325,34 @@ A. When raw Flipkart reports change:
 .\run_flipkart_post_analysis_refresh.ps1
 ```
 
-Default post-analysis refresh command:
+Fast daily refresh:
 ```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --sleep-seconds 5 --health-delay-seconds 30
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick
 ```
 
-Manual keyword refresh:
+Only Looker refresh:
 ```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --refresh-keywords --sleep-seconds 5
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode looker-only
 ```
 
-Manual visual competitor search:
+Only competitor refresh:
 ```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --run-visual-search --visual-max-fsns 5 --sleep-seconds 5
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode competitor-only
 ```
 
-Drive archive sync:
+Only COGS refresh:
 ```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --sync-drive-archive
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode cogs-only
 ```
 
-Detailed post-analysis verification command:
+Only health check:
 ```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --verify-all --sleep-seconds 5 --health-delay-seconds 30
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode health-only
 ```
 
-Refresh-only command without verification:
+Full safe refresh:
 ```powershell
-python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --skip-verification --sleep-seconds 5
+python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode full --sleep-seconds 5 --health-delay-seconds 30
 ```
 
 B. When only COGS changed:

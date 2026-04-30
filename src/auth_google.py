@@ -64,8 +64,8 @@ def build_services(
     token_path: Path | None = None,
 ) -> Tuple[object, object, Credentials]:
     creds = load_credentials(credentials_path=credentials_path, token_path=token_path)
-    sheets_service = build("sheets", "v4", credentials=creds)
-    drive_service = build("drive", "v3", credentials=creds)
+    sheets_service = build("sheets", "v4", credentials=creds, cache_discovery=False, static_discovery=False)
+    drive_service = build("drive", "v3", credentials=creds, cache_discovery=False, static_discovery=False)
     return sheets_service, drive_service, creds
 
 
@@ -79,4 +79,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
