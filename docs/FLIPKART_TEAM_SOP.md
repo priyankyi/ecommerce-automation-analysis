@@ -76,6 +76,8 @@ Use:
 .\run_flipkart_quick_refresh.ps1
 ```
 
+This uses the light Looker refresh path, which is the daily safe option.
+
 ## 7. Monthly full report process
 
 Use the `Monthly Raw File Replacement SOP` in section 14 before any full refresh.
@@ -126,6 +128,9 @@ Then run:
 - keyword cache pending = normal until Google approval
 - `Not Enough Data` competitor = image or search data missing
 - Google Sheets 429 = wait 5 minutes and rerun
+- Light Looker refresh = daily safe refresh and skips the large audit tabs by default
+- Full Looker refresh = monthly/heavy refresh only, when you need `RETURN_ALL_DETAILS` or `ORDER_ITEM_*` audit tabs
+- If the dashboard feels slow, rerun the light Looker refresh first
 
 ## 13. Emergency recovery
 
@@ -158,3 +163,9 @@ This is the safest way to replace raw Flipkart files each month.
 8. Fix the raw folder first
 9. Never keep old and new report files mixed in the raw folder
 10. Do not delete raw files immediately; archive them
+
+## 15. Looker refresh rule
+
+- Use light Looker refresh for normal daily work
+- Use full Looker refresh only when you need a full audit rebuild
+- Large audit tabs are skipped by default to avoid Google Sheets quota pressure

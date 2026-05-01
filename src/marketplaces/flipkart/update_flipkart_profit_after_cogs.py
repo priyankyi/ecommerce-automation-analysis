@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.auth_google import build_services
+from src.marketplaces.flipkart.flipkart_cogs_helpers import build_cost_indexes, get_usable_cogs, match_cost_row
 from src.marketplaces.flipkart.flipkart_utils import (
     LOG_DIR,
     append_csv_log,
@@ -36,11 +37,15 @@ PROFIT_COLUMNS = [
     "Packaging_Cost",
     "Other_Cost",
     "Total_Unit_COGS",
+    "Derived_Total_Unit_COGS",
     "Total_COGS",
     "Final_Net_Profit",
     "Final_Profit_Per_Order",
     "Final_Profit_Margin",
     "COGS_Status",
+    "COGS_Source",
+    "COGS_Data_Source",
+    "COGS_Missing_Reason",
 ]
 
 
@@ -187,15 +192,6 @@ def read_csv_rows(path: Path) -> List[Dict[str, str]]:
         return [dict(row) for row in csv.DictReader(handle)]
 
 
-def build_cost_index(rows: Sequence[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
-    indexed: Dict[str, Dict[str, str]] = {}
-    for row in rows:
-        fsn = clean_fsn(row.get("FSN", ""))
-        if fsn and fsn not in indexed:
-            indexed[fsn] = row
-    return indexed
-
-
 def format_money(value: Any) -> str:
     return format_decimal(value, 2)
 
@@ -205,17 +201,16 @@ def format_margin(value: Any) -> str:
 
 
 def derive_profit_values(analysis_row: Dict[str, str], cost_row: Dict[str, str]) -> Dict[str, Any]:
-    cost_price = normalize_text(cost_row.get("Cost_Price", ""))
-    packaging_cost = normalize_text(cost_row.get("Packaging_Cost", ""))
-    other_cost = normalize_text(cost_row.get("Other_Cost", ""))
-    total_unit_cogs = normalize_text(cost_row.get("Total_Unit_COGS", ""))
-    cogs_status = normalize_text(cost_row.get("COGS_Status", ""))
-
-    if not cogs_status:
-        cogs_status = "Missing" if not cost_price else "Entered"
-
-    if not total_unit_cogs and any(normalize_text(value) for value in (cost_price, packaging_cost, other_cost)):
-        total_unit_cogs = format_money(parse_float(cost_price) + parse_float(packaging_cost) + parse_float(other_cost))
+    cogs_snapshot = get_usable_cogs(cost_row)
+    cost_price = normalize_text(cogs_snapshot.get("Cost_Price", ""))
+    packaging_cost = normalize_text(cogs_snapshot.get("Packaging_Cost", ""))
+    other_cost = normalize_text(cogs_snapshot.get("Other_Cost", ""))
+    total_unit_cogs = normalize_text(cogs_snapshot.get("Total_Unit_COGS", ""))
+    derived_total_unit_cogs = normalize_text(cogs_snapshot.get("Derived_Total_Unit_COGS", ""))
+    cogs_status = normalize_text(cogs_snapshot.get("COGS_Status", ""))
+    cogs_source = normalize_text(cogs_snapshot.get("COGS_Source", ""))
+    cogs_data_source = normalize_text(cogs_snapshot.get("COGS_Data_Source", ""))
+    cogs_missing_reason = normalize_text(cogs_snapshot.get("COGS_Missing_Reason", ""))
 
     if not total_unit_cogs:
         return {
@@ -223,11 +218,15 @@ def derive_profit_values(analysis_row: Dict[str, str], cost_row: Dict[str, str])
             "Packaging_Cost": packaging_cost,
             "Other_Cost": other_cost,
             "Total_Unit_COGS": "",
+            "Derived_Total_Unit_COGS": derived_total_unit_cogs,
             "Total_COGS": "",
             "Final_Net_Profit": "",
             "Final_Profit_Per_Order": "",
             "Final_Profit_Margin": "",
             "COGS_Status": cogs_status or "Missing",
+            "COGS_Source": cogs_source,
+            "COGS_Data_Source": cogs_data_source,
+            "COGS_Missing_Reason": cogs_missing_reason,
         }
 
     units_sold = parse_float(analysis_row.get("Units_Sold", ""))
@@ -244,11 +243,15 @@ def derive_profit_values(analysis_row: Dict[str, str], cost_row: Dict[str, str])
         "Packaging_Cost": packaging_cost,
         "Other_Cost": other_cost,
         "Total_Unit_COGS": format_money(total_unit_cogs),
+        "Derived_Total_Unit_COGS": derived_total_unit_cogs,
         "Total_COGS": format_money(total_cogs),
         "Final_Net_Profit": format_money(final_net_profit),
         "Final_Profit_Per_Order": format_money(final_profit_per_order) if final_profit_per_order != "" else "",
         "Final_Profit_Margin": format_margin(final_profit_margin) if final_profit_margin != "" else "",
         "COGS_Status": cogs_status or "Missing",
+        "COGS_Source": cogs_source,
+        "COGS_Data_Source": cogs_data_source,
+        "COGS_Missing_Reason": cogs_missing_reason,
     }
 
 
@@ -275,7 +278,7 @@ def update_flipkart_profit_after_cogs() -> Dict[str, Any]:
     if not analysis_rows:
         raise RuntimeError(f"No rows found in Google Sheet tab: {SKU_ANALYSIS_TAB}")
     _, cost_rows = read_sheet_table(sheets_service, spreadsheet_id, COST_MASTER_TAB)
-    cost_index = build_cost_index(cost_rows)
+    cost_fsn_index, cost_sku_index = build_cost_indexes(cost_rows)
 
     output_headers = merge_headers(analysis_headers)
     output_rows: List[Dict[str, Any]] = []
@@ -292,10 +295,9 @@ def update_flipkart_profit_after_cogs() -> Dict[str, Any]:
             duplicate_fsns_skipped += 1
             continue
         seen_fsns.add(fsn)
-        cost_row = cost_index.get(fsn, {})
-        if not cost_row or not normalize_text(cost_row.get("Total_Unit_COGS", "")) and not any(
-            normalize_text(cost_row.get(field, "")) for field in ("Cost_Price", "Packaging_Cost", "Other_Cost")
-        ):
+        cost_row, match_source = match_cost_row(row, cost_fsn_index, cost_sku_index)
+        cogs_snapshot = get_usable_cogs(cost_row)
+        if not cost_row or not normalize_text(cogs_snapshot.get("Total_Unit_COGS", "")):
             missing_cost_rows += 1
         derived = derive_profit_values(row, cost_row)
         if not normalize_text(derived.get("Total_Unit_COGS", "")):

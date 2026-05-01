@@ -16,7 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.auth_google import build_services
-from src.marketplaces.flipkart.flipkart_cogs_helpers import count_cogs_rows, hydrate_analysis_rows
+from src.marketplaces.flipkart.flipkart_cogs_helpers import count_cogs_rows, hydrate_analysis_rows, is_cogs_available
 from src.marketplaces.flipkart.flipkart_utils import (
     LOG_DIR,
     OUTPUT_DIR,
@@ -752,8 +752,7 @@ def classify_readiness(
     return_row: Dict[str, Any],
     active_task_row: Dict[str, Any],
 ) -> Dict[str, str]:
-    cogs_status = normalize_text(analysis_row.get("COGS_Status", ""))
-    cogs_ready = "Ready" if cogs_status.upper() in {"ENTERED", "VERIFIED"} else "Missing"
+    cogs_ready = "Ready" if is_cogs_available(analysis_row) else "Missing"
 
     final_profit_margin_raw = normalize_text(analysis_row.get("Final_Profit_Margin", ""))
     final_net_profit = parse_float(analysis_row.get("Final_Net_Profit", ""))

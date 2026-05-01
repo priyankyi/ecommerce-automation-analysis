@@ -21,13 +21,16 @@ from src.marketplaces.flipkart.create_looker_studio_sources import (
     LOOKER_DEMAND_PROFILE_TAB,
     LOOKER_EXECUTIVE_TAB,
     LOOKER_FSN_METRICS_TAB,
-    LOOKER_MODULE_CONFIDENCE_TAB,
+    LOOKER_GROUP_TABS,
+    LOOKER_LARGE_TABS,
     LOOKER_LISTINGS_TAB,
+    LOOKER_MODULE_CONFIDENCE_TAB,
     LOOKER_ORDER_ITEM_EXPLORER_TAB,
     LOOKER_REPORT_FORMAT_MONITOR_TAB,
     LOOKER_RETURNS_TAB,
     LOOKER_RUN_COMPARISON_TAB,
     LOOKER_RUN_QUALITY_TAB,
+    LOOKER_REFRESH_MANIFEST_PATH,
     LOOKER_TABS,
     SOURCE_TABS,
     SPREADSHEET_META_PATH,
@@ -128,13 +131,26 @@ def read_first_available_table(
     return [], [], ""
 
 
+def load_looker_refresh_manifest() -> Dict[str, Any]:
+    if not LOOKER_REFRESH_MANIFEST_PATH.exists():
+        return {}
+    try:
+        return json.loads(LOOKER_REFRESH_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def verify_looker_studio_sources() -> Dict[str, Any]:
     if not SPREADSHEET_META_PATH.exists():
         raise FileNotFoundError(f"Missing required file: {SPREADSHEET_META_PATH}")
 
     spreadsheet_id = json.loads(SPREADSHEET_META_PATH.read_text(encoding="utf-8"))["spreadsheet_id"]
     sheets_service, _, _ = build_services()
-
+    manifest = load_looker_refresh_manifest()
+    looker_group = str(manifest.get("last_group", "light") or "light").lower()
+    quota_safe_mode = bool(manifest.get("quota_safe_mode", looker_group != "full"))
+    light_tabs = list(LOOKER_GROUP_TABS.get("light", []))
+    required_looker_tabs = list(LOOKER_TABS if looker_group == "full" else light_tabs)
     missing_tabs = [tab_name for tab_name in LOOKER_TABS if not tab_exists(sheets_service, spreadsheet_id, tab_name)]
     tabs_checked = LOOKER_TABS + SOURCE_TABS
 
@@ -160,6 +176,8 @@ def verify_looker_studio_sources() -> Dict[str, Any]:
     module_confidence_rows = looker_tables[LOOKER_MODULE_CONFIDENCE_TAB]
     demand_profile_rows = looker_tables[LOOKER_DEMAND_PROFILE_TAB]
     competitor_rows = looker_tables[LOOKER_COMPETITOR_INTELLIGENCE_TAB]
+    missing_required_tabs = [tab_name for tab_name in required_looker_tabs if tab_name not in available_tabs]
+    missing_large_tabs = [tab_name for tab_name in LOOKER_LARGE_TABS if tab_name not in available_tabs]
 
     blank_fsn_counts = {
         LOOKER_FSN_METRICS_TAB: count_blank_fsn(fsn_rows),
@@ -275,25 +293,35 @@ def verify_looker_studio_sources() -> Dict[str, Any]:
     source_tabs_still_have_rows = all(
         source_row_counts.get(tab_name, 0) > 0 for tab_name in SOURCE_TABS if tab_name not in optional_source_tabs
     )
+    required_row_tabs = [tab_name for tab_name in EXPECTED_ROW_TABS if tab_name in required_looker_tabs]
+    def _matches_source(tab_name: str, expected_count: int) -> bool:
+        if tab_name not in required_looker_tabs:
+            return True
+        return row_counts.get(tab_name, 0) == expected_count
+
     run_quality_tab_row_count_matches_source = row_counts.get(LOOKER_RUN_QUALITY_TAB, 0) == expected_row_counts[LOOKER_RUN_QUALITY_TAB]
     order_item_tab_row_count_matches_source = row_counts.get(LOOKER_ORDER_ITEM_EXPLORER_TAB, 0) == expected_row_counts[LOOKER_ORDER_ITEM_EXPLORER_TAB]
 
     checks = {
-        "all_looker_tabs_exist": not missing_tabs,
+        "all_looker_tabs_exist": not missing_required_tabs,
         "executive_summary_has_required_metrics": not missing_required_executive_metrics,
-        "looker_tabs_have_rows": all(row_counts.get(tab_name, 0) > 0 for tab_name in EXPECTED_ROW_TABS),
+        "looker_tabs_have_rows": all(row_counts.get(tab_name, 0) > 0 for tab_name in required_row_tabs),
         "fsn_tabs_have_no_blank_fsn": all(blank_fsn_counts.get(tab_name, 0) == 0 for tab_name in fsn_blank_check_tabs),
         "source_tabs_still_have_rows": source_tabs_still_have_rows,
-        "run_comparison_row_count_matches_source": row_counts.get(LOOKER_RUN_COMPARISON_TAB, 0) == expected_row_counts[LOOKER_RUN_COMPARISON_TAB],
-        "adjusted_profit_row_count_matches_source": row_counts.get(LOOKER_ADJUSTED_PROFIT_TAB, 0) == expected_row_counts[LOOKER_ADJUSTED_PROFIT_TAB],
-        "report_format_monitor_row_count_matches_source": row_counts.get(LOOKER_REPORT_FORMAT_MONITOR_TAB, 0) == expected_row_counts[LOOKER_REPORT_FORMAT_MONITOR_TAB],
+        "run_comparison_row_count_matches_source": _matches_source(LOOKER_RUN_COMPARISON_TAB, expected_row_counts[LOOKER_RUN_COMPARISON_TAB]),
+        "adjusted_profit_row_count_matches_source": _matches_source(LOOKER_ADJUSTED_PROFIT_TAB, expected_row_counts[LOOKER_ADJUSTED_PROFIT_TAB]),
+        "report_format_monitor_row_count_matches_source": _matches_source(LOOKER_REPORT_FORMAT_MONITOR_TAB, expected_row_counts[LOOKER_REPORT_FORMAT_MONITOR_TAB]),
         "run_quality_row_count_matches_source": run_quality_tab_row_count_matches_source,
-        "module_confidence_row_count_matches_source": row_counts.get(LOOKER_MODULE_CONFIDENCE_TAB, 0) == expected_row_counts[LOOKER_MODULE_CONFIDENCE_TAB],
-        "demand_profile_row_count_matches_source": row_counts.get(LOOKER_DEMAND_PROFILE_TAB, 0) == expected_row_counts[LOOKER_DEMAND_PROFILE_TAB],
-        "competitor_intelligence_row_count_matches_source": row_counts.get(LOOKER_COMPETITOR_INTELLIGENCE_TAB, 0) == expected_row_counts[LOOKER_COMPETITOR_INTELLIGENCE_TAB],
-        "order_item_explorer_row_count_matches_source": order_item_tab_row_count_matches_source,
+        "module_confidence_row_count_matches_source": _matches_source(LOOKER_MODULE_CONFIDENCE_TAB, expected_row_counts[LOOKER_MODULE_CONFIDENCE_TAB]),
+        "demand_profile_row_count_matches_source": _matches_source(LOOKER_DEMAND_PROFILE_TAB, expected_row_counts[LOOKER_DEMAND_PROFILE_TAB]),
+        "competitor_intelligence_row_count_matches_source": _matches_source(LOOKER_COMPETITOR_INTELLIGENCE_TAB, expected_row_counts[LOOKER_COMPETITOR_INTELLIGENCE_TAB]),
+        "order_item_explorer_row_count_matches_source": _matches_source(LOOKER_ORDER_ITEM_EXPLORER_TAB, expected_row_counts[LOOKER_ORDER_ITEM_EXPLORER_TAB]),
         "keyword_cache_pending_rows_allowed": keyword_cache_pending_count >= 0,
         "competitor_not_enough_data_rows_allowed": competitor_not_enough_data_count >= 0,
+        "looker_manifest_exists": LOOKER_REFRESH_MANIFEST_PATH.exists(),
+        "looker_light_tabs_exist": not [tab_name for tab_name in light_tabs if tab_name not in available_tabs],
+        "looker_large_tabs_optional": looker_group != "full" or not missing_large_tabs,
+        "looker_refresh_quota_safe_mode": quota_safe_mode,
     }
 
     status = "PASS_WITH_WARNINGS" if all(checks.values()) and warnings else ("PASS" if all(checks.values()) else "FAIL")

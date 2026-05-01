@@ -44,6 +44,7 @@ from src.marketplaces.flipkart.flipkart_utils import (
     now_iso,
     parse_float,
 )
+from src.marketplaces.flipkart.flipkart_cogs_helpers import is_cogs_available
 
 LOG_PATH = LOG_DIR / "flipkart_ads_recommendations_log.csv"
 LOCAL_OUTPUT_PATH = OUTPUT_DIR / "flipkart_ads_final_recommendations.csv"
@@ -380,10 +381,8 @@ def resolve_readiness(
     analysis_row: Dict[str, str],
     active_task_row: Dict[str, Any],
 ) -> Dict[str, str]:
-    cogs_status = pick_first_nonblank(planner_row.get("COGS_Readiness", ""), analysis_row.get("COGS_Status", ""))
-    if not cogs_status:
-        cogs_status = "Missing"
-    cogs_ready = "Ready" if normalize_text(cogs_status).upper() in {"READY", "ENTERED", "VERIFIED"} else "Missing"
+    cogs_ready = "Ready" if is_cogs_available(analysis_row) or normalize_text(planner_row.get("COGS_Readiness", "")) == "Ready" else "Missing"
+    cogs_status = "Ready" if cogs_ready == "Ready" else pick_first_nonblank(planner_row.get("COGS_Readiness", ""), analysis_row.get("COGS_Status", "")) or "Missing"
 
     profit_readiness = pick_first_nonblank(planner_row.get("Profit_Readiness", ""), "")
     if not profit_readiness:

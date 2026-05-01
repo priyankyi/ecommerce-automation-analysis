@@ -23,8 +23,38 @@ LOG_HEADERS = [
 ]
 
 _RUNNER_VISUAL_MAX_FSNS = 5
-RUN_MODES = ("full", "quick", "looker-only", "competitor-only", "cogs-only", "actions-only", "health-only")
-IN_PROCESS_STEPS = {"create_looker_studio_sources"}
+RUN_MODES = ("full", "quick", "quick-lite", "looker-only", "competitor-only", "cogs-only", "actions-only", "health-only")
+IN_PROCESS_STEPS: set[str] = set()
+LOOKER_GROUP_BY_MODE = {
+    "full": "full",
+    "quick": "light",
+    "quick-lite": "light",
+    "looker-only": "light",
+    "competitor-only": "competitor",
+    "cogs-only": "cogs",
+    "actions-only": "core",
+    "health-only": "light",
+}
+ORDER_ITEM_LOOKER_MODE_BY_MODE = {
+    "full": "master-only",
+    "quick": "master-only",
+    "quick-lite": "master-only",
+    "looker-only": "none",
+    "competitor-only": "none",
+    "cogs-only": "none",
+    "actions-only": "none",
+    "health-only": "none",
+}
+ORDER_ITEM_INTERNAL_MODE_BY_MODE = {
+    "full": "master-only",
+    "quick": "master-only",
+    "quick-lite": "master-only",
+    "looker-only": "master-only",
+    "competitor-only": "master-only",
+    "cogs-only": "master-only",
+    "actions-only": "master-only",
+    "health-only": "master-only",
+}
 
 STEP_TAB_MAP: Dict[str, List[str]] = {
     "update_flipkart_profit_after_cogs": ["FLIPKART_SKU_ANALYSIS"],
@@ -160,6 +190,13 @@ MODE_STEP_ORDER: Dict[str, List[str]] = {
         "verify_flipkart_integration_layer",
         "verify_flipkart_system_health",
     ],
+    "quick-lite": [
+        "update_product_type_demand_profile",
+        "create_flipkart_competitor_price_intelligence",
+        "create_flipkart_order_item_explorer",
+        "create_looker_studio_sources",
+        "verify_flipkart_system_health",
+    ],
     "looker-only": [
         "create_looker_studio_sources",
         "verify_flipkart_integration_layer",
@@ -257,6 +294,22 @@ def _append_log_row(payload: Dict[str, Any]) -> None:
     append_csv_log(LOG_PATH, LOG_HEADERS, [payload])
 
 
+def _append_step_timing_log_row(step_timing: Dict[str, Any]) -> None:
+    append_csv_log(
+        LOG_PATH,
+        LOG_HEADERS,
+        [
+            {
+                "timestamp": str(step_timing.get("finished_at", "")) or now_iso(),
+                "status": str(step_timing.get("status", "")),
+                "step_name": str(step_timing.get("step_name", "")),
+                "details": json.dumps(step_timing, ensure_ascii=False),
+                "log_path": str(LOG_PATH),
+            }
+        ],
+    )
+
+
 def _step_expected_status(step_name: str) -> Sequence[str]:
     if step_name == HEALTH_CHECK_STEP or step_name.startswith("verify_"):
         return ("PASS", "PASS_WITH_WARNINGS", "WARNING", "RETRY_LATER")
@@ -347,6 +400,29 @@ def _build_step_order(
     return step_names
 
 
+def _is_quota_safe_mode(
+    *,
+    mode: str,
+    looker_group: str,
+    order_item_internal_mode: str,
+    order_item_looker_mode: str,
+    refresh_keywords: bool,
+    run_visual_search: bool,
+    sync_drive_archive: bool,
+) -> bool:
+    if mode == "full":
+        return False
+    if looker_group == "full":
+        return False
+    if order_item_internal_mode not in {"master-only", "light"}:
+        return False
+    if order_item_looker_mode not in {"none", "master-only", "light"}:
+        return False
+    if refresh_keywords or run_visual_search or sync_drive_archive:
+        return False
+    return True
+
+
 def _build_execution_schedule(
     *,
     mode: str,
@@ -418,11 +494,17 @@ def _resolve_step_module_name(step_name: str) -> str:
 def _ordered_tabs(step_names: Sequence[str], step_payloads: Dict[str, Dict[str, Any]]) -> List[str]:
     ordered: List[str] = []
     for step_name in step_names:
-        tabs = step_payloads.get(step_name, {}).get("tabs_updated")
-        if tabs is None:
-            tabs = step_payloads.get(step_name, {}).get("dashboard_tabs_updated")
-        if not tabs:
+        payload = step_payloads.get(step_name, {})
+        if "tabs_written" in payload:
+            tabs = payload.get("tabs_written")
+        elif "tabs_updated" in payload:
+            tabs = payload.get("tabs_updated")
+        elif "dashboard_tabs_updated" in payload:
+            tabs = payload.get("dashboard_tabs_updated")
+        else:
             tabs = STEP_TAB_MAP.get(step_name, [])
+        if tabs is None:
+            tabs = []
         for tab_name in tabs:
             if tab_name not in ordered:
                 ordered.append(tab_name)
@@ -444,14 +526,23 @@ def _get_sheet_headers_batch(spreadsheet_id: str, tab_names: Sequence[str]) -> D
     return headers_by_tab
 
 
-def _run_step_subprocess(step_name: str) -> Dict[str, Any]:
+def _run_step_subprocess(
+    step_name: str,
+    *,
+    looker_group: str | None = None,
+    order_item_internal_mode: str | None = None,
+    order_item_looker_mode: str | None = None,
+) -> Dict[str, Any]:
     module_name = _resolve_step_module_name(step_name)
     if step_name in IN_PROCESS_STEPS:
         module = importlib.import_module(module_name)
         step_func = getattr(module, step_name, None)
         if step_func is None:
             raise AttributeError(f"{module_name} does not expose {step_name}()")
-        payload = step_func()
+        if step_name == "create_looker_studio_sources":
+            payload = step_func(group=looker_group or "light")
+        else:
+            payload = step_func()
         if not isinstance(payload, dict):
             raise RuntimeError(f"{step_name} returned a non-dict payload")
         payload = dict(payload)
@@ -467,6 +558,14 @@ def _run_step_subprocess(step_name: str) -> Dict[str, Any]:
     extra_args: List[str] = []
     if step_name == "run_flipkart_visual_competitor_search":
         extra_args = ["--max-fsns", str(_RUNNER_VISUAL_MAX_FSNS)]
+    elif step_name == "create_looker_studio_sources":
+        if looker_group:
+            extra_args.extend(["--group", looker_group])
+    elif step_name == "create_flipkart_order_item_explorer":
+        if order_item_internal_mode:
+            extra_args.extend(["--internal-mode", order_item_internal_mode])
+        if order_item_looker_mode:
+            extra_args.extend(["--looker-mode", order_item_looker_mode])
     with TemporaryDirectory(prefix=f"{step_name}_") as temp_dir:
         temp_path = Path(temp_dir)
         stdout_path = temp_path / "stdout.txt"
@@ -499,6 +598,49 @@ def _run_step_subprocess(step_name: str) -> Dict[str, Any]:
         warning_payload["__stderr"] = stderr_text.strip()
         return warning_payload
     return payload
+
+
+def _run_step_with_timing(
+    step_name: str,
+    *,
+    looker_group: str | None = None,
+    order_item_internal_mode: str | None = None,
+    order_item_looker_mode: str | None = None,
+) -> tuple[Dict[str, Any], Dict[str, Any], BaseException | None]:
+    started_at = now_iso()
+    started_perf = time.perf_counter()
+    failure_exc: BaseException | None = None
+    try:
+        payload = _run_step_subprocess(
+            step_name,
+            looker_group=looker_group,
+            order_item_internal_mode=order_item_internal_mode,
+            order_item_looker_mode=order_item_looker_mode,
+        )
+    except BaseException as exc:  # noqa: BLE001 - preserve timing for failures
+        failure_exc = exc
+        payload = {"status": "ERROR", "message": str(exc)}
+    finished_at = now_iso()
+    duration_seconds = round(time.perf_counter() - started_perf, 3)
+    status_value = str(payload.get("status", "")).upper() or "UNKNOWN"
+    timing_payload: Dict[str, Any] = {
+        "step_name": step_name,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "duration_seconds": duration_seconds,
+        "status": status_value,
+    }
+    if failure_exc is not None:
+        timing_payload["error"] = str(failure_exc)
+    elif _is_warning_payload(step_name, payload) or status_value in WARNING_STATUSES:
+        timing_payload["warning"] = _warning_message(step_name, payload)
+    elif status_value in {"ERROR", "FAIL"}:
+        timing_payload["error"] = str(payload.get("message", "")) or str(payload.get("__stderr", "")) or f"{step_name} failed"
+    elif int(payload.get("__returncode", 0) or 0) != 0:
+        timing_payload["error"] = str(payload.get("__stderr", "")) or f"{step_name} returned non-zero exit code"
+    payload = dict(payload)
+    payload["step_timing"] = timing_payload
+    return payload, timing_payload, failure_exc
 
 
 def _check_manual_columns(spreadsheet_id: str, tab_name: str, required_columns: Sequence[str]) -> bool:
@@ -536,6 +678,9 @@ def _run_raw_input_safety_check() -> Dict[str, Any]:
 def run_flipkart_post_analysis_refresh(
     *,
     mode: str = "quick",
+    looker_group: str | None = None,
+    order_item_internal_mode: str | None = None,
+    order_item_looker_mode: str | None = None,
     refresh_keywords: bool = False,
     run_visual_search: bool = False,
     visual_max_fsns: int = 5,
@@ -548,6 +693,24 @@ def run_flipkart_post_analysis_refresh(
 ) -> Dict[str, Any]:
     global _RUNNER_VISUAL_MAX_FSNS
     _RUNNER_VISUAL_MAX_FSNS = max(0, int(visual_max_fsns))
+    effective_looker_group = looker_group or LOOKER_GROUP_BY_MODE.get(mode, "light")
+    if effective_looker_group not in {"core", "ads", "returns", "orders", "cogs", "quality", "competitor", "full", "light"}:
+        raise ValueError(f"Unsupported looker group: {effective_looker_group}")
+    effective_order_item_internal_mode = order_item_internal_mode or ORDER_ITEM_INTERNAL_MODE_BY_MODE.get(mode, "master-only")
+    if effective_order_item_internal_mode not in {"master-only", "light", "full"}:
+        raise ValueError(f"Unsupported order-item internal mode: {effective_order_item_internal_mode}")
+    effective_order_item_looker_mode = order_item_looker_mode or ORDER_ITEM_LOOKER_MODE_BY_MODE.get(mode, "none")
+    if effective_order_item_looker_mode not in {"none", "master-only", "light", "full"}:
+        raise ValueError(f"Unsupported order-item looker mode: {effective_order_item_looker_mode}")
+    quota_safe_mode = _is_quota_safe_mode(
+        mode=mode,
+        looker_group=effective_looker_group,
+        order_item_internal_mode=effective_order_item_internal_mode,
+        order_item_looker_mode=effective_order_item_looker_mode,
+        refresh_keywords=refresh_keywords,
+        run_visual_search=run_visual_search,
+        sync_drive_archive=sync_drive_archive,
+    )
 
     raw_input_safety_result: Dict[str, Any] | None = None
     raw_input_safety_warning: str | None = None
@@ -571,6 +734,8 @@ def run_flipkart_post_analysis_refresh(
                 "verification_skipped": True,
                 "tabs_refreshed": [],
                 "drive_archive_synced": False,
+                "quota_safe_mode": False,
+                "step_timings": [],
                 "raw_input_safety_result": raw_input_safety_result,
                 "log_path": str(LOG_PATH),
             }
@@ -606,6 +771,7 @@ def run_flipkart_post_analysis_refresh(
     detailed_verify_steps = _build_detailed_verify_steps()
 
     step_payloads: Dict[str, Dict[str, Any]] = {}
+    step_timings: List[Dict[str, Any]] = []
     steps_run: List[str] = []
     failed_step: str | None = None
     failure_exc: BaseException | None = None
@@ -624,11 +790,25 @@ def run_flipkart_post_analysis_refresh(
             time.sleep(health_delay_seconds)
             continue
         try:
-            payload = _run_step_subprocess(step_name)
+            if step_name == "create_flipkart_order_item_explorer":
+                payload, timing_payload, step_exc = _run_step_with_timing(
+                    step_name,
+                    looker_group=effective_looker_group,
+                    order_item_internal_mode=effective_order_item_internal_mode,
+                    order_item_looker_mode=effective_order_item_looker_mode,
+                )
+            else:
+                payload, timing_payload, step_exc = _run_step_with_timing(step_name, looker_group=effective_looker_group)
             step_payloads[step_name] = payload
+            step_timings.append(timing_payload)
+            _append_step_timing_log_row(timing_payload)
             steps_run.append(step_name)
             status_value = str(payload.get("status", "")).upper()
             returncode = int(payload.get("__returncode", 0) or 0)
+            if step_exc is not None:
+                failed_step = step_name
+                failure_exc = step_exc
+                break
             if step_name == HEALTH_CHECK_STEP:
                 health_payload = payload
                 if status_value in WARNING_STATUSES or _is_google_sheets_429(str(payload.get("message", ""))):
@@ -713,6 +893,10 @@ def run_flipkart_post_analysis_refresh(
     summary = {
         "timestamp": now_iso(),
         "mode": mode,
+        "looker_group": effective_looker_group,
+        "order_item_internal_mode": effective_order_item_internal_mode,
+        "order_item_looker_mode": effective_order_item_looker_mode,
+        "quota_safe_mode": quota_safe_mode,
         "status": status,
         "steps_run": steps_run,
         "failed_step": failed_step,
@@ -726,6 +910,7 @@ def run_flipkart_post_analysis_refresh(
         "tabs_refreshed": tabs_refreshed,
         "manual_tabs_preserved": manual_tabs_preserved,
         "raw_input_safety_result": raw_input_safety_result,
+        "step_timings": step_timings,
         "log_path": str(LOG_PATH),
     }
     if error_type:
@@ -747,6 +932,9 @@ def run_flipkart_post_analysis_refresh(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Flipkart post-analysis refresh steps.")
     parser.add_argument("--mode", choices=RUN_MODES, default="quick", help="Refresh mode to run. Default: quick.")
+    parser.add_argument("--looker-group", choices=["core", "ads", "returns", "orders", "cogs", "quality", "competitor", "full", "light"], help="Override the Looker refresh group used by create_looker_studio_sources.")
+    parser.add_argument("--order-item-internal-mode", choices=["master-only", "light", "full"], help="Override the order-item internal write mode used by create_flipkart_order_item_explorer.")
+    parser.add_argument("--order-item-looker-mode", choices=["none", "master-only", "light", "full"], help="Override the order-item Looker write mode used by create_flipkart_order_item_explorer.")
     parser.add_argument("--refresh-keywords", action="store_true", help="Refresh Google Keyword Planner cache before rebuilding the demand profile.")
     parser.add_argument("--run-visual-search", action="store_true", help="Run Flipkart visual competitor search before competitor intelligence.")
     parser.add_argument("--visual-max-fsns", type=int, default=5, help="Maximum FSNs to send through visual competitor search.")
@@ -761,6 +949,9 @@ def main() -> None:
     try:
         summary = run_flipkart_post_analysis_refresh(
             mode=args.mode,
+            looker_group=args.looker_group,
+            order_item_internal_mode=args.order_item_internal_mode,
+            order_item_looker_mode=args.order_item_looker_mode,
             refresh_keywords=args.refresh_keywords,
             run_visual_search=args.run_visual_search,
             visual_max_fsns=max(0, args.visual_max_fsns),
@@ -777,10 +968,13 @@ def main() -> None:
     except Exception as exc:
         error_payload = {
             "timestamp": now_iso(),
+            "mode": args.mode,
             "status": "ERROR",
             "error_type": exc.__class__.__name__,
             "message": str(exc),
             "failed_step": "run_flipkart_post_analysis_refresh",
+            "quota_safe_mode": False,
+            "step_timings": [],
             "log_path": str(LOG_PATH),
         }
         _append_log_row(

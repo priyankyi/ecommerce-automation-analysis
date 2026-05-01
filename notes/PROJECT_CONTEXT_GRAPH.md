@@ -36,6 +36,11 @@ Phase 27 - Streamlit UX Cleanup + Order Item Explorer
 - `src/marketplaces/flipkart/create_flipkart_order_item_explorer.py` and `src/marketplaces/flipkart/verify_flipkart_order_item_explorer.py` were added to generate and verify `FLIPKART_ORDER_ITEM_EXPLORER` plus `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER`
 - `run_flipkart_post_analysis_refresh.py` now runs the order-item explorer before Looker source rebuilds in quick/full refresh paths
 - Looker source and verification layers now include the new order-item explorer tab
+- Latest order-item quota patch result: `status=PASS_WITH_WARNINGS`, `internal_mode=master-only`, `looker_mode=master-only`, `quota_safe_mode=true`, `internal_tabs_written=FLIPKART_ORDER_ITEM_MASTER`, `internal_tabs_skipped=FLIPKART_ORDER_ITEM_EXPLORER/FLIPKART_ORDER_ITEM_SOURCE_DETAIL`, `looker_tabs_written=LOOKER_FLIPKART_ORDER_ITEM_MASTER`, `looker_tabs_skipped=LOOKER_FLIPKART_ORDER_ITEM_EXPLORER/LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL`, `order_item_internal_manifest_exists=true`, `order_item_looker_manifest_exists=true`, `missing_cogs=0`, `analysis_cogs_available=123`, `cost_master_cogs_available=123`
+- Latest quick-lite runner result: `mode=quick-lite`, `looker_group=light`, `order_item_internal_mode=master-only`, `order_item_looker_mode=master-only`, `quota_safe_mode=true`, `status=SUCCESS_WITH_WARNINGS`, `failed_step=null`, `verification_passed=true`, `external_google_ads_called=false`, `external_visual_search_called=false`, `manual_tabs_preserved=true`
+- Latest quick-lite step timings: `update_product_type_demand_profile=14.786 sec`, `create_flipkart_competitor_price_intelligence=15.979 sec`, `create_flipkart_order_item_explorer=45.412 sec`, `create_looker_studio_sources=43.173 sec`, `verify_flipkart_system_health=17.134 sec`
+- Latest quick-lite tabs refreshed: `PRODUCT_TYPE_DEMAND_PROFILE`, `FLIPKART_COMPETITOR_PRICE_INTELLIGENCE`, `LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE`, `FLIPKART_ORDER_ITEM_MASTER`, `LOOKER_FLIPKART_ORDER_ITEM_MASTER`, `LOOKER_FLIPKART_EXECUTIVE_SUMMARY`, `LOOKER_FLIPKART_RETURNS`
+- Latest quick-lite accepted warnings: `CACHE_EMPTY / keyword cache pending` because Google Ads API Basic Access is pending, `competitor intelligence contains Not Enough Data` because visual/image data is incomplete, and `order item master has some blank FSN/missing profit rows` because source reports are incomplete
 - Latest order-item explorer verification: `status=PASS`, `order_item_rows=3017`, `looker_rows=3017`, `order_id_present_count=2934`, `order_item_id_present_count=2934`, `duplicate_order_item_id_count=0`, `blank_fsn_count=0`
 - Latest quick refresh result: `status=SUCCESS_WITH_WARNINGS`, `failed_step=null`, `verification_passed=true`, `external_google_ads_called=false`, `external_visual_search_called=false`, `manual_tabs_preserved=true`
 - Latest Stage 2 verification: `critical_alerts=22`, `high_alerts=70`, `medium_alerts=104`, `low_alerts=39`
@@ -57,6 +62,7 @@ Phase 27 - Streamlit UX Cleanup + Order Item Explorer
 - Latest dashboard log: `data/logs/marketplaces/flipkart/flipkart_dashboard_log.csv`
 - Streamlit dashboard launch path is working with `python -m streamlit run src/dashboard/flipkart_streamlit_app.py`
 - Streamlit timeout on launch is expected because the dashboard runs as a server process
+- Current blocker: none for the daily refresh path; quick-lite is now the safe default refresh mode, while heavier quick/full modes stay reserved for raw report changes or return-intelligence rebuilds
 - `src/marketplaces/flipkart/create_flipkart_fsn_drilldown.py` added
 - `FLIPKART_FSN_DRILLDOWN` support added
 - Latest drilldown run: `status=SUCCESS`, `fsn_count=123`, `default_selected_fsn=OTLGPN5GHRDFW8MJ`
@@ -258,6 +264,90 @@ Make monthly Flipkart raw report replacement noob-proof by keeping the active ra
 - `docs/FLIPKART_TEAM_SOP.md`, `docs/COMMAND_INDEX.md`, and `README.md` now point operators to the safety check before monthly full refresh
 - Latest local checker result is `BLOCKED` with `raw_file_count=10`, `duplicate_file_count=0`, `same_manifest_as_previous_run=true`, and a mixed-cycle warning on the `orders` category spanning `2026-04-28` and `2026-04-29`
 
+## Open Issue - Looker / Streamlit Quota-Safe Refresh Layer
+
+### Latest Result
+- `create_looker_studio_sources --group light` is now quota-safe by default and no longer rewrites unchanged tabs
+- Latest confirmed light refresh result: `status=SUCCESS`, `quota_safe_mode=true`, `tabs_requested=11`, `tabs_written=3`, `tabs_skipped_unchanged=8`
+- Large tabs are skipped in light mode by default: `LOOKER_FLIPKART_RETURN_ALL_DETAILS`, `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER`, and `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL`
+- COGS is fixed and health checks are clean: `missing_cogs=0`, `analysis_cogs_available=123`, `analysis_cogs_missing=0`, `cost_master_cogs_available=123`, `cost_master_cogs_missing=0`, `run_quality_score=81.9`
+- Remaining quota risk is now the order-item explorer write path inside `run_flipkart_post_analysis_refresh --mode quick`, which still calls `create_flipkart_order_item_explorer` and can write large Looker tabs
+
+### Problem
+- `create_looker_studio_sources.py` is now partially quota-safe, but `create_flipkart_order_item_explorer.py` still acts like a heavy write step during quick refreshes
+- The current risk is quick-run performance, not the order-item generator itself: the quota-safe internal/looker split is validated, but the full quick runner still times out in the Codex/tool environment
+- Looker / Streamlit refresh should be fast and quota-safe by default, with full Looker rebuilds and large order-item audit writes treated as optional rather than the normal daily path
+
+### Dependency Map
+- Raw / generated tabs feed `src/marketplaces/flipkart/create_looker_studio_sources.py`
+- `create_looker_studio_sources.py` rebuilds the `LOOKER_*` source tabs
+- Streamlit reads the `LOOKER_*` tabs through `src/dashboard/dashboard_google_sheets.py`
+- `src/dashboard/flipkart_streamlit_app.py` consumes the dashboard frames and depends on those Looker source tabs being stable
+- `run_flipkart_post_analysis_refresh.py` currently treats `create_looker_studio_sources` as an in-process refresh step and runs it in quick / full style refresh flows
+- order item source files / tabs -> `create_flipkart_order_item_explorer.py` -> `FLIPKART_ORDER_ITEM_EXPLORER` -> `FLIPKART_ORDER_ITEM_MASTER` -> `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` -> `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER` -> `LOOKER_FLIPKART_ORDER_ITEM_MASTER` -> `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` -> Streamlit Order ID Explorer / FSN Deep Dive
+
+### Quota-Risk Dependency Map
+- `FLIPKART_DASHBOARD_DATA` -> `LOOKER_FLIPKART_EXECUTIVE_SUMMARY`
+- `FLIPKART_SKU_ANALYSIS` -> `LOOKER_FLIPKART_FSN_METRICS`, `LOOKER_FLIPKART_ADJUSTED_PROFIT`
+- `FLIPKART_ALERTS_GENERATED` / `FLIPKART_ACTION_TRACKER` / `FLIPKART_ACTIVE_TASKS` -> `LOOKER_FLIPKART_ALERTS`, `LOOKER_FLIPKART_ACTIONS`
+- `FLIPKART_ADS_PLANNER` -> `LOOKER_FLIPKART_ADS`
+- `FLIPKART_RETURN_ISSUE_SUMMARY` and return v2 tabs -> `LOOKER_FLIPKART_RETURNS`, `LOOKER_FLIPKART_RETURN_ALL_DETAILS`, `LOOKER_FLIPKART_CUSTOMER_RETURNS`, `LOOKER_FLIPKART_COURIER_RETURNS`, `LOOKER_FLIPKART_RETURN_TYPE_PIVOT`
+- `FLIPKART_LISTING_PRESENCE` / `FLIPKART_MISSING_ACTIVE_LISTINGS` -> `LOOKER_FLIPKART_LISTINGS`
+- `FLIPKART_RUN_COMPARISON` / `FLIPKART_FSN_RUN_COMPARISON` -> `LOOKER_FLIPKART_RUN_COMPARISON`
+- `FLIPKART_REPORT_FORMAT_MONITOR` / `FLIPKART_REPORT_FORMAT_ISSUES` -> `LOOKER_FLIPKART_REPORT_FORMAT_MONITOR`
+- `FLIPKART_RUN_QUALITY_SCORE` / `FLIPKART_RUN_QUALITY_BREAKDOWN` -> `LOOKER_FLIPKART_RUN_QUALITY_SCORE`
+- `FLIPKART_MODULE_CONFIDENCE` / `FLIPKART_DATA_GAP_SUMMARY` -> `LOOKER_FLIPKART_MODULE_CONFIDENCE`
+- `PRODUCT_TYPE_DEMAND_PROFILE` / `GOOGLE_KEYWORD_METRICS_CACHE` -> `LOOKER_FLIPKART_DEMAND_PROFILE`
+- `FLIPKART_COMPETITOR_PRICE_INTELLIGENCE` -> `LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE`
+- `FLIPKART_ORDER_ITEM_EXPLORER` / `FLIPKART_ORDER_ITEM_MASTER` / `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` -> `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER`, `LOOKER_FLIPKART_ORDER_ITEM_MASTER`, `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL`
+- `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER` row_count=8115, `LOOKER_FLIPKART_ORDER_ITEM_MASTER` row_count=6233, `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` row_count=15593, so this chain is the remaining quota hotspot
+
+### Current Read / Write Behavior
+- `create_looker_studio_sources.py` reads many source tabs individually with `read_table(...)` and `read_optional_table(...)`
+- It also uses `build_copy_rows(...)` for several tabs, which can trigger extra source reads for fallback paths
+- `write_output_tab(...)` always clears the target tab and rewrites all rows, so unchanged tabs still consume write quota
+- The current source builder writes the main executive / FSN / alerts / actions / ads / returns / listings tabs and then the extension tabs on every run
+- `src/marketplaces/flipkart/flipkart_sheet_helpers.py` currently provides generic read / clear / write helpers but no skip-unchanged guard
+- `dashboard_google_sheets.py` reads a broad set of `LOOKER_*` and order-item tabs for dashboard loading, and quota errors currently downgrade to a wait-5-minutes warning
+- `verify_flipkart_integration_layer.py` and `verify_flipkart_system_health.py` are already more quota-safe because they batch read and focus on verification rather than rewrites
+- `create_flipkart_order_item_explorer.py` still writes the internal order-item tabs before the Looker layer and needs a safe quick-mode branch that leaves large Looker tabs alone unless explicitly requested
+
+### Highest Quota Consumers
+- `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL`
+- `LOOKER_FLIPKART_ORDER_ITEM_MASTER`
+- `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER`
+- `LOOKER_FLIPKART_RETURN_ALL_DETAILS`
+- `LOOKER_FLIPKART_COURIER_RETURNS`
+- `LOOKER_FLIPKART_CUSTOMER_RETURNS`
+- `LOOKER_FLIPKART_ACTIONS`
+- `LOOKER_FLIPKART_ALERTS`
+- `LOOKER_FLIPKART_EXECUTIVE_SUMMARY`
+- `LOOKER_FLIPKART_FSN_METRICS`
+- `LOOKER_FLIPKART_ADJUSTED_PROFIT`
+
+### File / Function / Risk Table
+| file | function | reads tabs | writes tabs | quota risk | recommended fix |
+| --- | --- | --- | --- | --- | --- |
+| `src/marketplaces/flipkart/create_looker_studio_sources.py` | `create_looker_studio_sources` | many `FLIPKART_*` source tabs, including order-item, return, ads, demand, run comparison, and quality tabs | all `LOOKER_*` source tabs | very high | split into selective refresh groups, skip unchanged writes, and exclude large audit tabs by default |
+| `src/marketplaces/flipkart/create_looker_studio_sources.py` | `write_output_tab` | none directly | one tab at a time after `clear_tab` | very high | add hash / row-count based skip-unchanged protection before clear/write |
+| `src/marketplaces/flipkart/create_looker_studio_sources.py` | `build_copy_rows` | fallback reads of source and optional tabs | none directly | medium | keep fallback reads but cache when the same source tab is already loaded in the current run |
+| `src/marketplaces/flipkart/flipkart_sheet_helpers.py` | `read_table`, `clear_tab`, `write_rows` | single-tab reads | full tab clears and full tab writes | medium | add a safe batch-read helper and a reusable write guard for unchanged payloads |
+| `src/marketplaces/flipkart/create_flipkart_order_item_explorer.py` | `create_flipkart_order_item_explorer` | order item source files / tabs | `FLIPKART_ORDER_ITEM_EXPLORER`, `FLIPKART_ORDER_ITEM_MASTER`, `FLIPKART_ORDER_ITEM_SOURCE_DETAIL`, and downstream Looker tabs | very high | add quick-mode flags to skip large Looker writes unless explicitly requested |
+| `src/marketplaces/flipkart/run_flipkart_post_analysis_refresh.py` | mode orchestration | step-dependent | step-dependent, includes `create_looker_studio_sources` | high | add explicit refresh groups so daily refresh can skip full Looker rebuilds |
+| `src/dashboard/dashboard_google_sheets.py` | dashboard load | broad `LOOKER_*` tab reads | none | medium | preserve dashboard reads but prefer fewer tabs or cached load paths where possible |
+| `src/dashboard/flipkart_streamlit_app.py` | dashboard consumer | consumes loaded frames | none | low | no major change; keep tab names stable for compatibility |
+| `src/marketplaces/flipkart/verify_flipkart_integration_layer.py` | verification | batched tab reads | none | low | keep as verification-only reference path |
+| `src/marketplaces/flipkart/verify_flipkart_system_health.py` | health check | batched tab reads | none | low | keep health-only and do not expand to full refresh work |
+
+### Minimum Safe Patch Plan
+1. Keep internal order-item source tabs refreshed: `FLIPKART_ORDER_ITEM_EXPLORER`, `FLIPKART_ORDER_ITEM_MASTER`, and `FLIPKART_ORDER_ITEM_SOURCE_DETAIL`
+2. Add quick-mode API / CLI flags to `create_flipkart_order_item_explorer.py` such as `--looker-light`, `--skip-large-looker`, and `--include-large-looker`
+3. Make quick refresh write `LOOKER_FLIPKART_ORDER_ITEM_MASTER` only when changed, skip `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` unless explicitly requested, and optionally skip `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER` legacy writes unless requested
+4. Reuse manifest / hash skip logic for order-item Looker writes so unchanged payloads do not clear and rewrite tabs
+5. Preserve dashboard compatibility by keeping Streamlit pointed primarily at `LOOKER_FLIPKART_ORDER_ITEM_MASTER`, with source detail treated as optional / warning-only when stale
+6. Keep the existing selective Looker refresh groups for the rest of the dashboard tabs, including the light daily path
+7. Treat full Looker refresh as explicit opt-in rather than the default daily source rebuild path
+
 ## Current Focus
 - Flipkart v1 is complete and production-safe. Upgrade 5 adjustment ledger is complete and verified, Upgrade 6 report-format monitoring is complete and verified, Upgrade 7 run quality score is complete and verified, Upgrade 8 module-wise data confidence is complete and verified, Upgrade 9 Google Keyword Planner integration is fallback-safe, and Upgrade 10 live visual competitor search is verified
 - Streamlit is now the primary dashboard path for daily operations; Looker Studio is optional and secondary
@@ -351,6 +441,10 @@ Fix Return Intelligence v2 so it correctly extracts Order_ID and Order_Item_ID, 
 - Split-return downstream leakage fix is validated: `Customer_Return_Rate` drives product/QC risk, `Courier_Return_Rate` drives logistics/RTO risk, and `Total_Return_Rate` is informational/operational pressure only
 - Split-return warning cleanup outcome: `OTLHA22RSA6PGNPF`, `OTLHGA7N9RFAF3SM`, `OTLHGABUCU2FZR6G`, and `OTLHYE2AGFBES2TT` were valid split-tab rows and no longer trigger false mirror warnings
 - Repo safety result: `status=PASS`, `safe_to_commit=true`
+- New COGS refresh blocker: `FLIPKART_COST_MASTER` shows `Cost_Price` and `COGS_Status=Entered`, but many rows still have blank `Total_Unit_Cost`, and downstream `cogs_missing_count` remains around `62`
+- COGS dependency map to inspect next: `update_flipkart_profit_after_cogs.py` -> `flipkart_sheet_helpers.py` -> `create_flipkart_ads_planner_foundation.py` -> `create_flipkart_run_quality_score.py` -> `create_flipkart_module_confidence.py` -> `create_looker_studio_sources.py` -> `verify_flipkart_system_health.py`
+- Proposed COGS rule fix: treat `Total_Unit_Cost` as usable when numeric, otherwise derive it from `Cost_Price + Packaging_Cost + Other_Cost` with blank packaging/other treated as zero, and key matching should prefer `FSN`, then `SKU_ID`, then any already-supported safe title fallback
+- Next COGS verification slice should confirm how the live sheet reads `FLIPKART_COST_MASTER`, how `COGS_Status` is derived, and how missing-Cogs counts flow into ads planner and dashboard/Looker metrics
 - Default team-safe refresh command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick`
 - Team-safe looker-only command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode looker-only`
 - Team-safe health-only command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode health-only`
@@ -391,10 +485,10 @@ Split the current order-item explorer into two clean layers so the team gets one
 ### Latest Result
 - `FLIPKART_ORDER_ITEM_EXPLORER` remains as the legacy compatibility view, while `FLIPKART_ORDER_ITEM_MASTER` and `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` are the canonical order-item layers
 - New Looker/Streamlit source tabs are live: `LOOKER_FLIPKART_ORDER_ITEM_MASTER` and `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL`
-- Latest `create_flipkart_order_item_explorer` result: `status=PASS_WITH_WARNINGS`, `legacy_explorer_rows=8115`, `master_rows=6233`, `source_detail_rows=15660`, `order_id_present_count=6139`, `order_item_id_present_count=6233`, `duplicate_order_item_id_count=0`
-- Latest explorer warnings: `blank_fsn_count_master=94`, `source_detail_blank_fsn_count=292`
-- Latest `verify_flipkart_order_item_explorer` result: `status=PASS_WITH_WARNINGS`, `duplicate_order_item_id_count_master=0`, `source_detail_row_count_ge_master=true`, `ids_treated_as_text=true`, `source_row_count_populated=true`, `sources_present_populated=true`
-- Latest quick refresh result: `status=SUCCESS_WITH_WARNINGS`, `failed_step=null`, `external_google_ads_called=false`, `external_visual_search_called=false`, `manual_tabs_preserved=true`
+- Latest `create_flipkart_order_item_explorer` result: `status=PASS_WITH_WARNINGS`, `internal_mode=master-only`, `looker_mode=master-only`, `internal_tabs_written=FLIPKART_ORDER_ITEM_MASTER`, `internal_tabs_skipped=FLIPKART_ORDER_ITEM_EXPLORER/FLIPKART_ORDER_ITEM_SOURCE_DETAIL`, `looker_tabs_written=LOOKER_FLIPKART_ORDER_ITEM_MASTER`, `looker_tabs_skipped=LOOKER_FLIPKART_ORDER_ITEM_EXPLORER/LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL`, `quota_safe_mode=true`
+- Latest explorer warnings: `blank_fsn_count_master=94`, `source_detail_blank_fsn_count=292`, `missing_cogs=0`, `analysis_cogs_available=123`, `cost_master_cogs_available=123`
+- Latest `verify_flipkart_order_item_explorer` result: `status=PASS_WITH_WARNINGS`, `duplicate_order_item_id_count_master=0`, `source_row_count_populated=true`, `sources_present_populated=true`
+- Latest quick refresh validation: `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick` timed out in the Codex/tool environment, and `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick --skip-verification` also timed out
 - Dashboard behavior now prefers `LOOKER_FLIPKART_ORDER_ITEM_MASTER` for daily search/copy work and uses `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` only for audit/debugging
 - Team guidance: copy `Order_ID` / `Order_Item_ID` from the master view first, then verify source-level differences manually in Flipkart only when needed
 

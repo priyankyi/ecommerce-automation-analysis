@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+import hashlib
 import csv
 import json
 import sys
@@ -56,6 +58,12 @@ ORDER_ITEM_SOURCE_DETAIL_TAB = "FLIPKART_ORDER_ITEM_SOURCE_DETAIL"
 LOOKER_ORDER_ITEM_MASTER_TAB = "LOOKER_FLIPKART_ORDER_ITEM_MASTER"
 LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB = "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL"
 RETURN_TYPE_PIVOT_TAB = "FLIPKART_RETURN_TYPE_PIVOT"
+ORDER_ITEM_REFRESH_MANIFEST_PATH = OUTPUT_DIR / "order_item_refresh_manifest.json"
+ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH = OUTPUT_DIR / "order_item_looker_refresh_manifest.json"
+INTERNAL_MODE_VALUES = {"master-only", "light", "full"}
+LOOKER_MODE_VALUES = {"none", "master-only", "light", "full"}
+INTERNAL_LIGHT_EXPLORER_ROW_THRESHOLD = 8000
+LOOKER_LIGHT_EXPLORER_ROW_THRESHOLD = 8000
 
 LOCAL_CSV_SOURCES: Dict[str, Path] = {
     "orders": NORMALIZED_ORDERS_PATH,
@@ -268,6 +276,60 @@ def load_sheet_table_if_available(
     if not headers:
         return pd.DataFrame()
     return pd.DataFrame(rows, columns=headers).fillna("")
+
+
+def _load_order_item_looker_manifest() -> Dict[str, Any]:
+    if not ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH.exists():
+        return {}
+    try:
+        return json.loads(ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_order_item_looker_manifest(payload: Dict[str, Any]) -> None:
+    ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _load_order_item_refresh_manifest() -> Dict[str, Any]:
+    if not ORDER_ITEM_REFRESH_MANIFEST_PATH.exists():
+        return {}
+    try:
+        return json.loads(ORDER_ITEM_REFRESH_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_order_item_refresh_manifest(payload: Dict[str, Any]) -> None:
+    ORDER_ITEM_REFRESH_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ORDER_ITEM_REFRESH_MANIFEST_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _content_hash(headers: Sequence[str], rows: Sequence[Dict[str, Any]]) -> str:
+    normalized_rows = [[text_value(row.get(header, "")) for header in headers] for row in rows]
+    payload = {"headers": list(headers), "rows": normalized_rows}
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _current_sheet_content_hash(
+    sheets_service,
+    spreadsheet_id: str,
+    tab_name: str,
+) -> str:
+    if not tab_exists(sheets_service, spreadsheet_id, tab_name):
+        return ""
+    headers, rows = read_table(sheets_service, spreadsheet_id, tab_name)
+    if not headers:
+        return ""
+    return _content_hash(headers, rows)
+
+
+def _normalize_internal_mode(internal_mode: str | None) -> str:
+    mode = text_value(internal_mode).lower() or "master-only"
+    if mode not in INTERNAL_MODE_VALUES:
+        raise ValueError(f"Unsupported order-item internal mode: {internal_mode}")
+    return mode
 
 
 def load_latest_run_id(frames: Sequence[pd.DataFrame], candidates: Sequence[str]) -> str:
@@ -1122,30 +1184,241 @@ def write_local_outputs(
     write_csv(LOCAL_LOOKER_SOURCE_DETAIL_PATH, ORDER_ITEM_SOURCE_DETAIL_HEADERS, source_detail_rows)
 
 
+def _normalize_looker_mode(looker_mode: str | None) -> str:
+    mode = text_value(looker_mode).lower() or "master-only"
+    if mode not in LOOKER_MODE_VALUES:
+        raise ValueError(f"Unsupported order-item Looker mode: {looker_mode}")
+    return mode
+
+
 def write_outputs_to_sheet(
     sheets_service,
     spreadsheet_id: str,
     legacy_rows: Sequence[Dict[str, Any]],
     master_rows: Sequence[Dict[str, Any]],
     source_detail_rows: Sequence[Dict[str, Any]],
-) -> List[str]:
-    write_sheet_tab(sheets_service, spreadsheet_id, ORDER_ITEM_TAB, OUTPUT_HEADERS, legacy_rows)
-    write_sheet_tab(sheets_service, spreadsheet_id, LOOKER_ORDER_ITEM_TAB, OUTPUT_HEADERS, legacy_rows)
-    write_sheet_tab(sheets_service, spreadsheet_id, ORDER_ITEM_MASTER_TAB, ORDER_ITEM_MASTER_HEADERS, master_rows)
-    write_sheet_tab(sheets_service, spreadsheet_id, ORDER_ITEM_SOURCE_DETAIL_TAB, ORDER_ITEM_SOURCE_DETAIL_HEADERS, source_detail_rows)
-    write_sheet_tab(sheets_service, spreadsheet_id, LOOKER_ORDER_ITEM_MASTER_TAB, ORDER_ITEM_MASTER_HEADERS, master_rows)
-    write_sheet_tab(sheets_service, spreadsheet_id, LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB, ORDER_ITEM_SOURCE_DETAIL_HEADERS, source_detail_rows)
-    return [
-        ORDER_ITEM_TAB,
-        LOOKER_ORDER_ITEM_TAB,
-        ORDER_ITEM_MASTER_TAB,
-        ORDER_ITEM_SOURCE_DETAIL_TAB,
-        LOOKER_ORDER_ITEM_MASTER_TAB,
-        LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB,
+    *,
+    internal_mode: str = "master-only",
+    looker_mode: str = "master-only",
+    force_write: bool = False,
+    force_looker_write: bool = False,
+) -> Dict[str, Any]:
+    normalized_internal_mode = _normalize_internal_mode(internal_mode)
+    normalized_mode = _normalize_looker_mode(looker_mode)
+    internal_manifest = _load_order_item_refresh_manifest()
+    manifest = _load_order_item_looker_manifest()
+    existing_internal_entries = {
+        str(entry.get("tab_name", "")): dict(entry)
+        for entry in internal_manifest.get("tabs", [])
+        if isinstance(entry, dict) and str(entry.get("tab_name", "")).strip()
+    }
+    existing_entries = {
+        str(entry.get("tab_name", "")): dict(entry)
+        for entry in manifest.get("tabs", [])
+        if isinstance(entry, dict) and str(entry.get("tab_name", "")).strip()
+    }
+
+    internal_tabs_written: List[str] = []
+    internal_tabs_skipped: List[str] = []
+    skipped_unchanged_internal_tabs: List[str] = []
+    large_internal_tabs_skipped: List[str] = []
+    looker_tabs_written: List[str] = []
+    looker_tabs_skipped: List[str] = []
+    skipped_unchanged_looker_tabs: List[str] = []
+    large_looker_tabs_skipped: List[str] = []
+    internal_manifest_entries: List[Dict[str, Any]] = []
+    manifest_entries: List[Dict[str, Any]] = []
+
+    for tab_name, headers, rows in [
+        (ORDER_ITEM_TAB, OUTPUT_HEADERS, legacy_rows),
+        (ORDER_ITEM_MASTER_TAB, ORDER_ITEM_MASTER_HEADERS, master_rows),
+        (ORDER_ITEM_SOURCE_DETAIL_TAB, ORDER_ITEM_SOURCE_DETAIL_HEADERS, source_detail_rows),
+    ]:
+        row_count = len(rows)
+        column_count = len(headers)
+        content_hash = _content_hash(headers, rows)
+        existing_entry = existing_internal_entries.get(tab_name, {})
+        last_written_at = text_value(existing_entry.get("last_written_at", ""))
+        current_sheet_hash = ""
+        skip_reason = ""
+        should_write = False
+
+        if normalized_internal_mode == "master-only":
+            if tab_name == ORDER_ITEM_MASTER_TAB:
+                should_write = True
+            else:
+                skip_reason = "mode"
+        elif normalized_internal_mode == "light":
+            if tab_name == ORDER_ITEM_MASTER_TAB:
+                should_write = True
+            elif tab_name == ORDER_ITEM_TAB:
+                if row_count > INTERNAL_LIGHT_EXPLORER_ROW_THRESHOLD:
+                    skip_reason = "row_threshold"
+                    large_internal_tabs_skipped.append(tab_name)
+                else:
+                    should_write = True
+            else:
+                skip_reason = "mode"
+        elif normalized_internal_mode == "full":
+            should_write = True
+
+        if should_write and not force_write:
+            stored_hash = text_value(existing_entry.get("content_hash", ""))
+            if not stored_hash:
+                current_sheet_hash = _current_sheet_content_hash(sheets_service, spreadsheet_id, tab_name)
+            if stored_hash == content_hash or current_sheet_hash == content_hash:
+                should_write = False
+                skip_reason = "unchanged_hash"
+                skipped_unchanged_internal_tabs.append(tab_name)
+
+        if should_write:
+            write_sheet_tab(sheets_service, spreadsheet_id, tab_name, headers, rows)
+            last_written_at = now_iso()
+            internal_tabs_written.append(tab_name)
+        else:
+            internal_tabs_skipped.append(tab_name)
+            if skip_reason == "row_threshold" and tab_name not in large_internal_tabs_skipped:
+                large_internal_tabs_skipped.append(tab_name)
+
+        internal_manifest_entries.append(
+            {
+                "tab_name": tab_name,
+                "row_count": row_count,
+                "column_count": column_count,
+                "content_hash": content_hash,
+                "last_written_at": last_written_at,
+                "written": should_write,
+                "skip_reason": skip_reason,
+            }
+        )
+
+    looker_tab_specs = [
+        (LOOKER_ORDER_ITEM_TAB, OUTPUT_HEADERS, legacy_rows),
+        (LOOKER_ORDER_ITEM_MASTER_TAB, ORDER_ITEM_MASTER_HEADERS, master_rows),
+        (LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB, ORDER_ITEM_SOURCE_DETAIL_HEADERS, source_detail_rows),
     ]
 
+    for tab_name, headers, rows in looker_tab_specs:
+        row_count = len(rows)
+        column_count = len(headers)
+        content_hash = _content_hash(headers, rows)
+        existing_entry = existing_entries.get(tab_name, {})
+        last_written_at = text_value(existing_entry.get("last_written_at", ""))
+        current_sheet_hash = ""
+        skip_reason = ""
+        should_write = False
 
-def create_flipkart_order_item_explorer() -> Dict[str, Any]:
+        if normalized_mode == "none":
+            skip_reason = "mode"
+        elif normalized_mode == "master-only":
+            if tab_name == LOOKER_ORDER_ITEM_MASTER_TAB:
+                should_write = True
+            else:
+                skip_reason = "mode"
+        elif normalized_mode == "light":
+            if tab_name == LOOKER_ORDER_ITEM_MASTER_TAB:
+                should_write = True
+            elif tab_name == LOOKER_ORDER_ITEM_TAB:
+                if row_count > LOOKER_LIGHT_EXPLORER_ROW_THRESHOLD:
+                    skip_reason = "row_threshold"
+                    large_looker_tabs_skipped.append(tab_name)
+                else:
+                    should_write = True
+            else:
+                skip_reason = "mode"
+                large_looker_tabs_skipped.append(tab_name)
+        elif normalized_mode == "full":
+            should_write = True
+
+        if should_write and not force_looker_write:
+            stored_hash = text_value(existing_entry.get("content_hash", ""))
+            if not stored_hash:
+                current_sheet_hash = _current_sheet_content_hash(sheets_service, spreadsheet_id, tab_name)
+            if stored_hash == content_hash or current_sheet_hash == content_hash:
+                should_write = False
+                skip_reason = "unchanged_hash"
+                skipped_unchanged_looker_tabs.append(tab_name)
+
+        if should_write:
+            write_sheet_tab(sheets_service, spreadsheet_id, tab_name, headers, rows)
+            last_written_at = now_iso()
+            looker_tabs_written.append(tab_name)
+        else:
+            looker_tabs_skipped.append(tab_name)
+            if skip_reason == "row_threshold" and tab_name not in large_looker_tabs_skipped:
+                large_looker_tabs_skipped.append(tab_name)
+            if skip_reason == "mode" and tab_name == LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB and normalized_mode != "full":
+                large_looker_tabs_skipped.append(tab_name)
+
+        manifest_entries.append(
+            {
+                "tab_name": tab_name,
+                "row_count": row_count,
+                "column_count": column_count,
+                "content_hash": content_hash,
+                "last_written_at": last_written_at,
+                "written": should_write,
+                "skip_reason": skip_reason,
+            }
+        )
+
+    manifest_payload = {
+        **{key: value for key, value in manifest.items() if key != "tabs"},
+        "spreadsheet_id": spreadsheet_id,
+        "last_written_at": now_iso(),
+        "last_order_item_looker_mode": normalized_mode,
+        "looker_mode": normalized_mode,
+        "quota_safe_mode": normalized_mode != "full",
+        "force_looker_write": bool(force_looker_write),
+        "skipped_unchanged_looker_tabs": skipped_unchanged_looker_tabs,
+        "large_looker_tabs_skipped": large_looker_tabs_skipped,
+        "looker_tabs_written": looker_tabs_written,
+        "looker_tabs_skipped": looker_tabs_skipped,
+        "tabs": sorted(manifest_entries, key=lambda entry: entry["tab_name"]),
+    }
+    internal_manifest_payload = {
+        **{key: value for key, value in internal_manifest.items() if key != "tabs"},
+        "spreadsheet_id": spreadsheet_id,
+        "last_written_at": now_iso(),
+        "last_order_item_internal_mode": normalized_internal_mode,
+        "internal_mode": normalized_internal_mode,
+        "quota_safe_mode": normalized_internal_mode != "full" and normalized_mode != "full",
+        "force_write": bool(force_write),
+        "skipped_unchanged_internal_tabs": skipped_unchanged_internal_tabs,
+        "large_internal_tabs_skipped": large_internal_tabs_skipped,
+        "internal_tabs_written": internal_tabs_written,
+        "internal_tabs_skipped": internal_tabs_skipped,
+        "tabs": sorted(internal_manifest_entries, key=lambda entry: entry["tab_name"]),
+    }
+    _save_order_item_refresh_manifest(internal_manifest_payload)
+    _save_order_item_looker_manifest(manifest_payload)
+    tabs_written = internal_tabs_written + looker_tabs_written
+    return {
+        "internal_mode": normalized_internal_mode,
+        "internal_tabs_written": internal_tabs_written,
+        "internal_tabs_skipped": internal_tabs_skipped,
+        "looker_tabs_written": looker_tabs_written,
+        "looker_tabs_skipped": looker_tabs_skipped,
+        "skipped_unchanged_internal_tabs": skipped_unchanged_internal_tabs,
+        "skipped_unchanged_looker_tabs": skipped_unchanged_looker_tabs,
+        "large_internal_tabs_skipped": large_internal_tabs_skipped,
+        "large_looker_tabs_skipped": large_looker_tabs_skipped,
+        "internal_manifest_path": str(ORDER_ITEM_REFRESH_MANIFEST_PATH),
+        "looker_manifest_path": str(ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH),
+        "quota_safe_mode": normalized_internal_mode != "full" and normalized_mode != "full",
+        "looker_mode": normalized_mode,
+        "tabs_written": tabs_written,
+        "tabs_updated": tabs_written,
+    }
+
+
+def create_flipkart_order_item_explorer(
+    *,
+    internal_mode: str = "master-only",
+    looker_mode: str = "master-only",
+    force_write: bool = False,
+    force_looker_write: bool = False,
+) -> Dict[str, Any]:
     ensure_directories()
     if not SPREADSHEET_META_PATH.exists():
         raise FileNotFoundError(f"Missing required file: {SPREADSHEET_META_PATH}")
@@ -1153,11 +1426,37 @@ def create_flipkart_order_item_explorer() -> Dict[str, Any]:
     spreadsheet_id = load_json(SPREADSHEET_META_PATH)["spreadsheet_id"]
     sheets_service, _, _ = build_services()
     source = load_source_data(sheets_service, spreadsheet_id)
-    legacy_rows, summary = build_legacy_order_item_explorer_rows(source)
     source_detail_rows, detail_summary = build_source_detail_rows(source)
     master_rows = build_master_rows(source_detail_rows)
-    write_local_outputs(legacy_rows, master_rows, source_detail_rows)
-    tabs_updated = write_outputs_to_sheet(sheets_service, spreadsheet_id, legacy_rows, master_rows, source_detail_rows)
+    normalized_internal_mode = _normalize_internal_mode(internal_mode)
+    normalized_looker_mode = _normalize_looker_mode(looker_mode)
+    fast_master_only_path = normalized_internal_mode == "master-only" and normalized_looker_mode == "master-only"
+    if fast_master_only_path:
+        legacy_rows: List[Dict[str, Any]] = []
+        summary = {
+            "run_id": detail_summary["run_id"],
+            "source_counts": {},
+            "alert_rows": detail_summary["alert_rows"],
+            "source_row_total": detail_summary["source_row_total"],
+        }
+    else:
+        legacy_rows, summary = build_legacy_order_item_explorer_rows(source)
+    if fast_master_only_path:
+        write_csv(LOCAL_MASTER_PATH, ORDER_ITEM_MASTER_HEADERS, master_rows)
+        write_csv(LOCAL_LOOKER_MASTER_PATH, ORDER_ITEM_MASTER_HEADERS, master_rows)
+    else:
+        write_local_outputs(legacy_rows, master_rows, source_detail_rows)
+    sheet_write_summary = write_outputs_to_sheet(
+        sheets_service,
+        spreadsheet_id,
+        legacy_rows,
+        master_rows,
+        source_detail_rows,
+        internal_mode=internal_mode,
+        looker_mode=looker_mode,
+        force_write=force_write,
+        force_looker_write=force_looker_write,
+    )
 
     order_id_present_count = sum(1 for row in master_rows if text_value(row.get("Order_ID", "")))
     order_item_id_present_count = sum(1 for row in master_rows if text_value(row.get("Order_Item_ID", "")))
@@ -1189,6 +1488,19 @@ def create_flipkart_order_item_explorer() -> Dict[str, Any]:
         "status": status,
         "spreadsheet_id": spreadsheet_id,
         "run_id": summary["run_id"],
+        "internal_mode": sheet_write_summary["internal_mode"],
+        "looker_mode": sheet_write_summary["looker_mode"],
+        "internal_tabs_written": sheet_write_summary["internal_tabs_written"],
+        "internal_tabs_skipped": sheet_write_summary["internal_tabs_skipped"],
+        "looker_tabs_written": sheet_write_summary["looker_tabs_written"],
+        "looker_tabs_skipped": sheet_write_summary["looker_tabs_skipped"],
+        "skipped_unchanged_internal_tabs": sheet_write_summary["skipped_unchanged_internal_tabs"],
+        "skipped_unchanged_looker_tabs": sheet_write_summary["skipped_unchanged_looker_tabs"],
+        "large_internal_tabs_skipped": sheet_write_summary["large_internal_tabs_skipped"],
+        "large_looker_tabs_skipped": sheet_write_summary["large_looker_tabs_skipped"],
+        "quota_safe_mode": sheet_write_summary["quota_safe_mode"],
+        "internal_manifest_path": sheet_write_summary["internal_manifest_path"],
+        "looker_manifest_path": sheet_write_summary["looker_manifest_path"],
         "legacy_explorer_rows": len(legacy_rows),
         "master_rows": len(master_rows),
         "source_detail_rows": len(source_detail_rows),
@@ -1200,7 +1512,8 @@ def create_flipkart_order_item_explorer() -> Dict[str, Any]:
         "source_detail_blank_fsn_count": source_detail_blank_fsn_count,
         "order_only_fallback_count": order_only_fallback_count,
         "warnings": warnings,
-        "tabs_updated": tabs_updated,
+        "tabs_written": sheet_write_summary["tabs_written"],
+        "tabs_updated": sheet_write_summary["tabs_updated"],
         "local_outputs": {
             "order_item_explorer": str(LOCAL_LEGACY_ORDER_ITEM_PATH),
             "looker_order_item_explorer": str(LOCAL_LEGACY_LOOKER_PATH),
@@ -1248,7 +1561,7 @@ def create_flipkart_order_item_explorer() -> Dict[str, Any]:
                 "source_detail_blank_fsn_count": source_detail_blank_fsn_count,
                 "order_only_fallback_count": order_only_fallback_count,
                 "status": status,
-                "message": "Rebuilt Flipkart order-item master, source detail, and legacy tabs",
+                "message": f"Rebuilt Flipkart order-item tabs with internal_mode={sheet_write_summary['internal_mode']} looker_mode={sheet_write_summary['looker_mode']}",
             }
         ],
     )
@@ -1257,8 +1570,20 @@ def create_flipkart_order_item_explorer() -> Dict[str, Any]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Create the Flipkart order-item explorer and master tabs.")
+    parser.add_argument("--internal-mode", choices=sorted(INTERNAL_MODE_VALUES), default="master-only", help="Order-item internal write mode. Default: master-only.")
+    parser.add_argument("--looker-mode", choices=sorted(LOOKER_MODE_VALUES), default="master-only", help="Order-item Looker write mode. Default: master-only.")
+    parser.add_argument("--force-write", action="store_true", help="Rewrite internal order-item tabs even when the content hash is unchanged.")
+    parser.add_argument("--force-looker-write", action="store_true", help="Rewrite Looker order-item tabs even when the content hash is unchanged.")
+    args = parser.parse_args()
+
     try:
-        create_flipkart_order_item_explorer()
+        create_flipkart_order_item_explorer(
+            internal_mode=args.internal_mode,
+            looker_mode=args.looker_mode,
+            force_write=args.force_write,
+            force_looker_write=args.force_looker_write,
+        )
     except Exception as exc:
         print(
             json.dumps(

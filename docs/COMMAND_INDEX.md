@@ -6,10 +6,28 @@
 .\run_flipkart_quick_refresh.ps1
 ```
 
-## Looker-only refresh
+## Looker light refresh
 
 ```powershell
 .\run_flipkart_looker_refresh.ps1
+```
+
+```powershell
+.\run_flipkart_looker_light_refresh.ps1
+```
+
+Use `run_flipkart_looker_full_refresh.ps1` only when you need the large audit tabs.
+
+## Looker full refresh
+
+```powershell
+.\run_flipkart_looker_full_refresh.ps1
+```
+
+## Looker ads refresh
+
+```powershell
+.\run_flipkart_looker_ads_refresh.ps1
 ```
 
 ## Health-only check

@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.auth_google import build_services
+from src.marketplaces.flipkart.flipkart_cogs_helpers import get_usable_cogs, is_cogs_available
 from src.marketplaces.flipkart.flipkart_sheet_helpers import (
     add_basic_filter,
     clear_tab,
@@ -461,20 +462,30 @@ def pnl_confidence(analysis_row: Dict[str, Any]) -> Tuple[float, str, str]:
 
 
 def cogs_confidence(analysis_row: Dict[str, Any], cost_row: Dict[str, Any]) -> Tuple[float, str, str]:
-    cogs_status = first_nonblank(analysis_row, "COGS_Status") or first_nonblank(cost_row, "COGS_Status")
+    usable_row = dict(cost_row or {})
+    if not usable_row:
+        usable_row = dict(analysis_row or {})
+    cogs_snapshot = get_usable_cogs(usable_row)
+    cogs_status = first_nonblank(cogs_snapshot, "COGS_Status") or first_nonblank(analysis_row, "COGS_Status") or first_nonblank(cost_row, "COGS_Status")
     cogs_status_norm = normalize_text(cogs_status)
-    if cogs_status_norm == "Verified":
-        score = 100.0
-        reason = "COGS_Status=Verified."
-    elif cogs_status_norm == "Entered":
-        score = 85.0
-        reason = "COGS_Status=Entered."
-    elif cogs_status_norm == "Needs Review":
-        score = 50.0
-        reason = "COGS_Status=Needs Review."
+    if is_cogs_available(usable_row) or is_cogs_available(analysis_row):
+        if cogs_status_norm == "Verified":
+            score = 100.0
+            reason = "Usable COGS present and COGS_Status=Verified."
+        elif cogs_status_norm == "Entered":
+            score = 90.0
+            reason = "Usable COGS present and COGS_Status=Entered."
+        else:
+            score = 80.0
+            reason = f"Usable COGS present via {first_nonblank(cogs_snapshot, 'COGS_Source') or 'derived cost'}."
     else:
         score = 0.0
-        reason = "COGS status is Missing or blank."
+        if cogs_status_norm == "Entered":
+            reason = "COGS_Status=Entered but no numeric usable COGS was found."
+        elif cogs_status_norm == "Verified":
+            reason = "COGS_Status=Verified but no numeric usable COGS was found."
+        else:
+            reason = "COGS status is missing and no numeric usable COGS was found."
     return score, status_from_score(score), reason
 
 

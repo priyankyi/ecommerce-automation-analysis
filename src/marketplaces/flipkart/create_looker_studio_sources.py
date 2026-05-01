@@ -16,9 +16,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.auth_google import build_services
-from src.marketplaces.flipkart.flipkart_cogs_helpers import COGS_AVAILABLE_STATUSES, count_cogs_rows, is_cogs_available
+from src.marketplaces.flipkart.flipkart_cogs_helpers import COGS_AVAILABLE_STATUSES, count_cogs_rows, get_usable_cogs, is_cogs_available
 from src.marketplaces.flipkart.flipkart_utils import (
     LOG_DIR,
+    OUTPUT_DIR,
     append_csv_log,
     build_status_payload,
     clean_fsn,
@@ -115,6 +116,70 @@ LOOKER_TABS = [
     LOOKER_COMPETITOR_INTELLIGENCE_TAB,
 ]
 
+LOOKER_LARGE_TABS = [
+    "LOOKER_FLIPKART_RETURN_ALL_DETAILS",
+    "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
+    "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
+]
+
+LOOKER_GROUP_TABS = {
+    "core": [
+        LOOKER_EXECUTIVE_TAB,
+        LOOKER_FSN_METRICS_TAB,
+        LOOKER_ALERTS_TAB,
+        LOOKER_ACTIONS_TAB,
+        LOOKER_ADS_TAB,
+        LOOKER_RETURNS_TAB,
+        LOOKER_LISTINGS_TAB,
+    ],
+    "ads": [
+        LOOKER_ADS_TAB,
+        LOOKER_EXECUTIVE_TAB,
+        LOOKER_FSN_METRICS_TAB,
+    ],
+    "returns": [
+        LOOKER_RETURNS_TAB,
+        LOOKER_RETURN_TYPE_PIVOT_TAB,
+        LOOKER_CUSTOMER_RETURNS_TAB,
+        LOOKER_COURIER_RETURNS_TAB,
+        LOOKER_EXECUTIVE_TAB,
+        LOOKER_FSN_METRICS_TAB,
+    ],
+    "orders": [
+        LOOKER_ORDER_ITEM_MASTER_TAB,
+        LOOKER_EXECUTIVE_TAB,
+    ],
+    "cogs": [
+        LOOKER_ADJUSTED_PROFIT_TAB,
+        LOOKER_FSN_METRICS_TAB,
+        LOOKER_ADS_TAB,
+        LOOKER_EXECUTIVE_TAB,
+    ],
+    "quality": [
+        LOOKER_RUN_QUALITY_TAB,
+        LOOKER_MODULE_CONFIDENCE_TAB,
+        LOOKER_REPORT_FORMAT_MONITOR_TAB,
+        LOOKER_EXECUTIVE_TAB,
+    ],
+    "competitor": [
+        LOOKER_COMPETITOR_INTELLIGENCE_TAB,
+        LOOKER_ADS_TAB,
+        LOOKER_EXECUTIVE_TAB,
+    ],
+}
+
+LOOKER_GROUP_TABS["light"] = [
+    LOOKER_EXECUTIVE_TAB,
+    LOOKER_ALERTS_TAB,
+    LOOKER_ACTIONS_TAB,
+    LOOKER_ADS_TAB,
+    LOOKER_RETURNS_TAB,
+    LOOKER_LISTINGS_TAB,
+]
+LOOKER_GROUP_TABS["full"] = list(LOOKER_TABS)
+
+LOOKER_REFRESH_MANIFEST_PATH = OUTPUT_DIR / "looker_refresh_manifest.json"
+
 LOOKER_HEADERS = {
     LOOKER_EXECUTIVE_TAB: [
         "Report_Date",
@@ -151,10 +216,14 @@ LOOKER_HEADERS = {
         "Net_Profit_Before_COGS",
         "Cost_Price",
         "Total_Unit_COGS",
+        "Derived_Total_Unit_COGS",
         "Total_COGS",
         "Final_Net_Profit",
         "Final_Profit_Margin",
         "COGS_Status",
+        "COGS_Source",
+        "COGS_Data_Source",
+        "COGS_Missing_Reason",
         "Data_Confidence",
         "Final_Action",
         "Final_Ads_Decision",
@@ -464,7 +533,7 @@ METRIC_ROWS = [
 
 
 def retry(func: Callable[[], Any], attempts: int = 3) -> Any:
-    delays = (30, 60, 90)
+    delays = (5, 15, 30)
     for attempt in range(1, attempts + 1):
         try:
             return func()
@@ -476,6 +545,57 @@ def retry(func: Callable[[], Any], attempts: int = 3) -> Any:
 
             delay = delays[min(attempt - 1, len(delays) - 1)]
             time.sleep(delay)
+
+
+def _is_quota_limited_http_error(exc: HttpError) -> bool:
+    message = str(exc).lower()
+    status = getattr(exc.resp, "status", None)
+    return status == 429 or "quota" in message or "rate_limit" in message or "rate limit" in message
+
+
+def _normalize_manifest_value(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_normalize_manifest_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _normalize_manifest_value(item) for key, item in value.items()}
+    return value
+
+
+def _load_looker_refresh_manifest() -> Dict[str, Any]:
+    if not LOOKER_REFRESH_MANIFEST_PATH.exists():
+        return {}
+    try:
+        return json.loads(LOOKER_REFRESH_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_looker_refresh_manifest(payload: Dict[str, Any]) -> None:
+    LOOKER_REFRESH_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LOOKER_REFRESH_MANIFEST_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _hash_looker_rows(headers: Sequence[str], rows: Sequence[Dict[str, Any]]) -> str:
+    normalized_rows = [[normalize_text(row.get(header, "")) for header in headers] for row in rows]
+    payload = {"headers": list(headers), "rows": normalized_rows}
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _build_looker_refresh_manifest_entry(
+    *,
+    tab_name: str,
+    source_tab_names: Sequence[str],
+    headers: Sequence[str],
+    rows: Sequence[Dict[str, Any]],
+) -> Dict[str, Any]:
+    return {
+        "tab_name": tab_name,
+        "source_tab_names": list(dict.fromkeys(source_tab_names)),
+        "row_count": len(rows),
+        "column_count": len(headers),
+        "content_hash": _hash_looker_rows(headers, rows),
+        "last_written_at": now_iso(),
+    }
 
 
 def load_json(path: Path) -> Dict[str, Any]:
@@ -839,17 +959,17 @@ def safe_metric_text(row: Dict[str, Any], *fields: str) -> str:
     return ""
 
 
-def resolve_cogs_fields(row: Dict[str, Any]) -> Tuple[str, str, str, str]:
-    cost_price = safe_metric_text(row, "Cost_Price")
-    total_unit_cogs = safe_metric_text(row, "Total_Unit_COGS")
+def resolve_cogs_fields(row: Dict[str, Any]) -> Tuple[str, str, str, str, str, str, str, str]:
+    cogs_snapshot = get_usable_cogs(row)
+    cost_price = safe_metric_text(cogs_snapshot, "Cost_Price")
+    total_unit_cogs = safe_metric_text(cogs_snapshot, "Total_Unit_COGS")
+    derived_total_unit_cogs = safe_metric_text(cogs_snapshot, "Derived_Total_Unit_COGS")
     total_cogs = safe_metric_text(row, "Total_COGS")
     final_net_profit = safe_metric_text(row, "Final_Net_Profit")
-
-    if not total_unit_cogs and any(safe_metric_text(row, field) for field in ("Cost_Price", "Packaging_Cost", "Other_Cost")):
-        total_unit_cogs = normalize_number_text(
-            parse_float(row.get("Cost_Price", "")) + parse_float(row.get("Packaging_Cost", "")) + parse_float(row.get("Other_Cost", "")),
-            2,
-        )
+    cogs_status = safe_metric_text(cogs_snapshot, "COGS_Status")
+    cogs_source = safe_metric_text(cogs_snapshot, "COGS_Source")
+    cogs_data_source = safe_metric_text(cogs_snapshot, "COGS_Data_Source")
+    cogs_missing_reason = safe_metric_text(cogs_snapshot, "COGS_Missing_Reason")
 
     if not total_cogs and total_unit_cogs:
         total_cogs = normalize_number_text(parse_float(total_unit_cogs) * parse_float(row.get("Units_Sold", "")), 2)
@@ -857,7 +977,7 @@ def resolve_cogs_fields(row: Dict[str, Any]) -> Tuple[str, str, str, str]:
     if not final_net_profit and total_cogs:
         final_net_profit = normalize_number_text(parse_float(row.get("Net_Profit_Before_COGS", "")) - parse_float(total_cogs), 2)
 
-    return cost_price, total_unit_cogs, total_cogs, final_net_profit
+    return cost_price, total_unit_cogs, derived_total_unit_cogs, total_cogs, final_net_profit, cogs_status, cogs_source or cogs_data_source, cogs_missing_reason
 
 
 def build_fsn_metrics_rows(
@@ -888,7 +1008,7 @@ def build_fsn_metrics_rows(
         customer_return_row = customer_return_lookup.get(fsn, {})
         courier_return_row = courier_return_lookup.get(fsn, {})
 
-        cost_price, total_unit_cogs, total_cogs, final_net_profit = resolve_cogs_fields(analysis_row)
+        cost_price, total_unit_cogs, derived_total_unit_cogs, total_cogs, final_net_profit, cogs_status, cogs_source_summary, cogs_missing_reason = resolve_cogs_fields(analysis_row)
         final_profit_margin = safe_metric_text(analysis_row, "Final_Profit_Margin")
         gross_sales_value = parse_float(analysis_row.get("Gross_Sales", ""))
         if not final_profit_margin and final_net_profit and gross_sales_value > 0:
@@ -928,11 +1048,14 @@ def build_fsn_metrics_rows(
                 "Net_Profit_Before_COGS": safe_metric_text(analysis_row, "Net_Profit_Before_COGS"),
                 "Cost_Price": cost_price,
                 "Total_Unit_COGS": total_unit_cogs,
+                "Derived_Total_Unit_COGS": safe_metric_text(analysis_row, "Derived_Total_Unit_COGS") or derived_total_unit_cogs,
                 "Total_COGS": total_cogs,
                 "Final_Net_Profit": final_net_profit,
                 "Final_Profit_Margin": final_profit_margin,
-                "COGS_Status": safe_metric_text(analysis_row, "COGS_Status")
-                or ("Entered" if normalize_text(total_unit_cogs) else "Missing"),
+                "COGS_Status": cogs_status or ("Entered" if normalize_text(total_unit_cogs) else "Missing"),
+                "COGS_Source": safe_metric_text(analysis_row, "COGS_Source") or cogs_source_summary,
+                "COGS_Data_Source": safe_metric_text(analysis_row, "COGS_Data_Source") or cogs_source_summary,
+                "COGS_Missing_Reason": safe_metric_text(analysis_row, "COGS_Missing_Reason") or cogs_missing_reason,
                 "Data_Confidence": safe_metric_text(analysis_row, "Data_Confidence"),
                 "Final_Action": safe_metric_text(analysis_row, "Final_Action", "Suggested_Action"),
                 "Final_Ads_Decision": safe_metric_text(analysis_row, "Final_Ads_Decision", "Suggested_Ad_Action", "Final_Action"),
@@ -1352,7 +1475,7 @@ def _quota_limited_warning_result(spreadsheet_id: str) -> Dict[str, Any]:
     }
 
 
-def create_looker_studio_sources() -> Dict[str, Any]:
+def create_looker_studio_sources(*, group: str = "light", include_large_tabs: bool = False, force: bool = False) -> Dict[str, Any]:
     ensure_directories()
     if not SPREADSHEET_META_PATH.exists():
         raise FileNotFoundError(f"Missing required file: {SPREADSHEET_META_PATH}")
@@ -1360,43 +1483,117 @@ def create_looker_studio_sources() -> Dict[str, Any]:
     meta = load_json(SPREADSHEET_META_PATH)
     spreadsheet_id = meta["spreadsheet_id"]
     sheets_service, _, _ = build_services()
+    selected_group = normalize_text(group).lower() or "light"
+    if selected_group not in LOOKER_GROUP_TABS:
+        raise ValueError(f"Unsupported Looker refresh group: {group}")
+
+    requested_tabs = list(LOOKER_GROUP_TABS[selected_group])
+    refresh_tabs = list(LOOKER_TABS if selected_group == "full" else requested_tabs)
+    if include_large_tabs and selected_group != "full":
+        for tab_name in LOOKER_LARGE_TABS:
+            if tab_name not in refresh_tabs:
+                refresh_tabs.append(tab_name)
+    large_tabs_skipped = [tab_name for tab_name in LOOKER_LARGE_TABS if tab_name not in refresh_tabs]
+    quota_safe_mode = selected_group != "full" and not force
+    needs_return_all_details = LOOKER_RETURN_ALL_DETAILS_TAB in refresh_tabs
+    needs_customer_returns = LOOKER_CUSTOMER_RETURNS_TAB in refresh_tabs
+    needs_courier_returns = LOOKER_COURIER_RETURNS_TAB in refresh_tabs
+    needs_return_type_pivot = LOOKER_RETURN_TYPE_PIVOT_TAB in refresh_tabs
+    needs_order_item_tabs = any(
+        tab_name in refresh_tabs
+        for tab_name in (
+            LOOKER_ORDER_ITEM_EXPLORER_TAB,
+            LOOKER_ORDER_ITEM_MASTER_TAB,
+            LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB,
+        )
+    )
+    needs_adjusted_profit = LOOKER_ADJUSTED_PROFIT_TAB in refresh_tabs
+    needs_run_comparison = LOOKER_RUN_COMPARISON_TAB in refresh_tabs
+    needs_report_format = LOOKER_REPORT_FORMAT_MONITOR_TAB in refresh_tabs
+    needs_module_confidence = LOOKER_MODULE_CONFIDENCE_TAB in refresh_tabs
+    needs_competitor = LOOKER_COMPETITOR_INTELLIGENCE_TAB in refresh_tabs
+    needs_run_quality = LOOKER_RUN_QUALITY_TAB in refresh_tabs
+    needs_demand_profile = LOOKER_DEMAND_PROFILE_TAB in refresh_tabs
+    needs_fsn_metrics = LOOKER_FSN_METRICS_TAB in refresh_tabs
+    source_tab_cache: Dict[str, Tuple[List[str], List[Dict[str, str]]]] = {}
+    source_tabs_read_count = 0
+    source_tabs_cache_hits = 0
+
+    def read_table_cached(tab_name: str, *, optional: bool = False) -> Tuple[List[str], List[Dict[str, str]]]:
+        nonlocal source_tabs_read_count, source_tabs_cache_hits
+        if tab_name in source_tab_cache:
+            source_tabs_cache_hits += 1
+            return source_tab_cache[tab_name]
+        if optional and not tab_exists(sheets_service, spreadsheet_id, tab_name):
+            source_tab_cache[tab_name] = ([], [])
+            return source_tab_cache[tab_name]
+        headers, rows = read_table(sheets_service, spreadsheet_id, tab_name)
+        source_tab_cache[tab_name] = (headers, rows)
+        source_tabs_read_count += 1
+        return headers, rows
+
+    def read_first_available_table_cached(tab_names: Sequence[str]) -> Tuple[List[str], List[Dict[str, str]], str]:
+        for tab_name in tab_names:
+            if not tab_exists(sheets_service, spreadsheet_id, tab_name):
+                continue
+            headers, rows = read_table_cached(tab_name)
+            return headers, rows, tab_name
+        return [], [], ""
+
+    def build_copy_rows_cached(primary_tab_name: str, fallback_tab_names: Sequence[str]) -> Tuple[List[str], List[Dict[str, Any]], str]:
+        headers, rows, source_tab = read_first_available_table_cached((primary_tab_name, *fallback_tab_names))
+        return headers, _copy_rows(rows), source_tab
+
+    def source_ref(*tab_names: str) -> List[str]:
+        return [tab_name for tab_name in tab_names if tab_name]
 
     try:
         for tab_name in SOURCE_TABS:
             ensure_required_tab_exists(sheets_service, spreadsheet_id, tab_name)
 
-        dashboard_data_headers, dashboard_data_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_DASHBOARD_DATA")
-        analysis_headers, analysis_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_SKU_ANALYSIS")
-        alerts_headers, alerts_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ALERTS_GENERATED")
-        active_tasks_headers, active_tasks_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ACTIVE_TASKS")
-        tracker_headers, tracker_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ACTION_TRACKER")
-        ads_headers, ads_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ADS_PLANNER")
-        return_headers, return_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_RETURN_ISSUE_SUMMARY")
-        return_all_details_headers, return_all_details_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_RETURN_ALL_DETAILS")
-        customer_return_headers, customer_return_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_CUSTOMER_RETURN_COMMENTS")
-        courier_return_headers, courier_return_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_COURIER_RETURN_COMMENTS")
-        customer_issue_headers, customer_issue_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY")
-        courier_issue_headers, courier_issue_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_COURIER_RETURN_SUMMARY")
-        return_type_pivot_headers, return_type_pivot_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_RETURN_TYPE_PIVOT")
-        listing_headers, listing_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_LISTING_PRESENCE")
-        missing_listing_headers, missing_listing_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_MISSING_ACTIVE_LISTINGS")
-        run_history_headers, run_history_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_RUN_HISTORY")
-        fsn_history_headers, fsn_history_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_FSN_HISTORY")
-        order_item_headers, order_item_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ORDER_ITEM_EXPLORER")
-        order_item_master_headers, order_item_master_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ORDER_ITEM_MASTER")
-        order_item_source_detail_headers, order_item_source_detail_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ORDER_ITEM_SOURCE_DETAIL")
+        dashboard_data_headers, dashboard_data_rows = read_table_cached("FLIPKART_DASHBOARD_DATA")
+        analysis_headers, analysis_rows = read_table_cached("FLIPKART_SKU_ANALYSIS")
+        alerts_headers, alerts_rows = read_table_cached("FLIPKART_ALERTS_GENERATED")
+        active_tasks_headers, active_tasks_rows = read_table_cached("FLIPKART_ACTIVE_TASKS")
+        tracker_headers, tracker_rows = read_table_cached("FLIPKART_ACTION_TRACKER")
+        ads_headers, ads_rows = read_table_cached("FLIPKART_ADS_PLANNER")
+        return_headers, return_rows = read_table_cached("FLIPKART_RETURN_ISSUE_SUMMARY")
+        if needs_return_all_details:
+            return_all_details_headers, return_all_details_rows = read_table_cached("FLIPKART_RETURN_ALL_DETAILS", optional=True)
+        else:
+            return_all_details_headers, return_all_details_rows = [], []
+        if needs_customer_returns:
+            customer_return_headers, customer_return_rows = read_table_cached("FLIPKART_CUSTOMER_RETURN_COMMENTS", optional=True)
+        else:
+            customer_return_headers, customer_return_rows = [], []
+        if needs_courier_returns:
+            courier_return_headers, courier_return_rows = read_table_cached("FLIPKART_COURIER_RETURN_COMMENTS", optional=True)
+        else:
+            courier_return_headers, courier_return_rows = [], []
+        if needs_fsn_metrics:
+            customer_issue_headers, customer_issue_rows = read_table_cached("FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY", optional=True)
+            courier_issue_headers, courier_issue_rows = read_table_cached("FLIPKART_COURIER_RETURN_SUMMARY", optional=True)
+            return_type_pivot_headers, return_type_pivot_rows = read_table_cached("FLIPKART_RETURN_TYPE_PIVOT", optional=True)
+        else:
+            customer_issue_headers, customer_issue_rows = [], []
+            courier_issue_headers, courier_issue_rows = [], []
+            return_type_pivot_headers, return_type_pivot_rows = [], []
+        listing_headers, listing_rows = read_table_cached("FLIPKART_LISTING_PRESENCE")
+        missing_listing_headers, missing_listing_rows = read_table_cached("FLIPKART_MISSING_ACTIVE_LISTINGS")
+        run_history_headers, run_history_rows = read_table_cached("FLIPKART_RUN_HISTORY")
+        if needs_order_item_tabs:
+            order_item_headers, order_item_rows = read_table_cached("FLIPKART_ORDER_ITEM_EXPLORER")
+            order_item_master_headers, order_item_master_rows = read_table_cached("FLIPKART_ORDER_ITEM_MASTER")
+            order_item_source_detail_headers, order_item_source_detail_rows = read_table_cached("FLIPKART_ORDER_ITEM_SOURCE_DETAIL")
+        else:
+            order_item_headers, order_item_rows = [], []
+            order_item_master_headers, order_item_master_rows = [], []
+            order_item_source_detail_headers, order_item_source_detail_rows = [], []
 
         latest_run_row = get_latest_run_row(run_history_rows)
         latest_run_id = latest_text_value(latest_run_row, "Run_ID")
         report_date = latest_text_value(latest_run_row, "Report_End_Date", "Run_Date") or datetime.now().date().isoformat()
 
-        analysis_lookup = build_index(analysis_rows, key_field="FSN")
-        listing_lookup = build_index(listing_rows, key_field="FSN")
-        missing_listing_lookup = build_index(missing_listing_rows, key_field="FSN")
-        ads_lookup = build_index(ads_rows, key_field="FSN")
-        return_lookup = build_index(return_type_pivot_rows, key_field="FSN")
-        customer_return_lookup = build_index(customer_issue_rows, key_field="FSN")
-        courier_return_lookup = build_index(courier_issue_rows, key_field="FSN")
         dashboard_lookup = build_dashboard_lookup(dashboard_data_rows)
 
         analysis_fsns = [clean_fsn(row.get("FSN", "")) for row in analysis_rows if clean_fsn(row.get("FSN", ""))]
@@ -1441,16 +1638,26 @@ def create_looker_studio_sources() -> Dict[str, Any]:
         }
 
         executive_rows = build_executive_summary_rows(context, dashboard_lookup)
-        fsn_metric_rows = build_fsn_metrics_rows(
-            analysis_rows,
-            listing_lookup,
-            missing_listing_lookup,
-            ads_lookup,
-            return_lookup,
-            customer_return_lookup,
-            courier_return_lookup,
-            latest_run_id,
-        )
+        if needs_fsn_metrics:
+            analysis_lookup = build_index(analysis_rows, key_field="FSN")
+            listing_lookup = build_index(listing_rows, key_field="FSN")
+            missing_listing_lookup = build_index(missing_listing_rows, key_field="FSN")
+            ads_lookup = build_index(ads_rows, key_field="FSN")
+            return_lookup = build_index(return_type_pivot_rows, key_field="FSN")
+            customer_return_lookup = build_index(customer_issue_rows, key_field="FSN")
+            courier_return_lookup = build_index(courier_issue_rows, key_field="FSN")
+            fsn_metric_rows = build_fsn_metrics_rows(
+                analysis_rows,
+                listing_lookup,
+                missing_listing_lookup,
+                ads_lookup,
+                return_lookup,
+                customer_return_lookup,
+                courier_return_lookup,
+                latest_run_id,
+            )
+        else:
+            fsn_metric_rows = []
         alert_rows = build_alert_rows(alerts_rows, latest_run_id)
         action_rows = build_action_rows(tracker_rows)
         ads_source_rows = build_ads_rows(ads_rows)
@@ -1462,40 +1669,53 @@ def create_looker_studio_sources() -> Dict[str, Any]:
         courier_issue_source_rows = _copy_rows(courier_issue_rows)
         return_type_pivot_source_rows = _copy_rows(return_type_pivot_rows)
         listing_source_rows = build_listings_rows(listing_rows, missing_listing_rows)
-        adjusted_profit_headers, adjusted_profit_rows, _ = build_copy_rows(
-            "FLIPKART_ADJUSTED_PROFIT",
-            [LOOKER_ADJUSTED_PROFIT_TAB],
-            sheets_service,
-            spreadsheet_id,
-        )
-        run_comparison_headers, run_comparison_rows, _ = build_copy_rows(
-            "FLIPKART_RUN_COMPARISON",
-            [],
-            sheets_service,
-            spreadsheet_id,
-        )
-        report_format_headers, report_format_rows, _ = build_copy_rows(
-            "FLIPKART_REPORT_FORMAT_MONITOR",
-            [LOOKER_REPORT_FORMAT_MONITOR_TAB],
-            sheets_service,
-            spreadsheet_id,
-        )
-        module_confidence_headers, module_confidence_rows, _ = build_copy_rows(
-            "FLIPKART_MODULE_CONFIDENCE",
-            [],
-            sheets_service,
-            spreadsheet_id,
-        )
-        competitor_headers, competitor_rows, _ = build_copy_rows(
-            "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
-            [],
-            sheets_service,
-            spreadsheet_id,
-        )
-        demand_headers, demand_rows = read_table(sheets_service, spreadsheet_id, "PRODUCT_TYPE_DEMAND_PROFILE")
-        keyword_cache_headers, keyword_cache_rows = read_optional_table(sheets_service, spreadsheet_id, "GOOGLE_KEYWORD_METRICS_CACHE")
-        run_quality_score_headers, run_quality_score_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_RUN_QUALITY_SCORE")
-        run_quality_breakdown_headers, run_quality_breakdown_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_RUN_QUALITY_BREAKDOWN")
+        if needs_adjusted_profit:
+            adjusted_profit_headers, adjusted_profit_rows, adjusted_profit_source_tab = build_copy_rows_cached(
+                "FLIPKART_ADJUSTED_PROFIT",
+                [LOOKER_ADJUSTED_PROFIT_TAB],
+            )
+        else:
+            adjusted_profit_headers, adjusted_profit_rows, adjusted_profit_source_tab = [], [], ""
+        if needs_run_comparison:
+            run_comparison_headers, run_comparison_rows, run_comparison_source_tab = build_copy_rows_cached(
+                "FLIPKART_RUN_COMPARISON",
+                [],
+            )
+        else:
+            run_comparison_headers, run_comparison_rows, run_comparison_source_tab = [], [], ""
+        if needs_report_format:
+            report_format_headers, report_format_rows, report_format_source_tab = build_copy_rows_cached(
+                "FLIPKART_REPORT_FORMAT_MONITOR",
+                [LOOKER_REPORT_FORMAT_MONITOR_TAB],
+            )
+        else:
+            report_format_headers, report_format_rows, report_format_source_tab = [], [], ""
+        if needs_module_confidence:
+            module_confidence_headers, module_confidence_rows, module_confidence_source_tab = build_copy_rows_cached(
+                "FLIPKART_MODULE_CONFIDENCE",
+                [],
+            )
+        else:
+            module_confidence_headers, module_confidence_rows, module_confidence_source_tab = [], [], ""
+        if needs_competitor:
+            competitor_headers, competitor_rows, competitor_source_tab = build_copy_rows_cached(
+                "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
+                [],
+            )
+        else:
+            competitor_headers, competitor_rows, competitor_source_tab = [], [], ""
+        if needs_demand_profile:
+            demand_headers, demand_rows = read_table_cached("PRODUCT_TYPE_DEMAND_PROFILE")
+            keyword_cache_headers, keyword_cache_rows = read_table_cached("GOOGLE_KEYWORD_METRICS_CACHE", optional=True)
+        else:
+            demand_headers, demand_rows = [], []
+            keyword_cache_headers, keyword_cache_rows = [], []
+        if needs_run_quality:
+            run_quality_score_headers, run_quality_score_rows = read_table_cached("FLIPKART_RUN_QUALITY_SCORE", optional=True)
+            run_quality_breakdown_headers, run_quality_breakdown_rows = read_table_cached("FLIPKART_RUN_QUALITY_BREAKDOWN", optional=True)
+        else:
+            run_quality_score_headers, run_quality_score_rows = [], []
+            run_quality_breakdown_headers, run_quality_breakdown_rows = [], []
         looker_run_quality_headers, looker_run_quality_rows = build_run_quality_looker_rows(
             run_quality_score_headers,
             run_quality_score_rows,
@@ -1508,49 +1728,239 @@ def create_looker_studio_sources() -> Dict[str, Any]:
             keyword_cache_rows,
         )
 
-        output_payloads = {
-            LOOKER_EXECUTIVE_TAB: executive_rows,
-            LOOKER_FSN_METRICS_TAB: fsn_metric_rows,
-            LOOKER_ALERTS_TAB: alert_rows,
-            LOOKER_ACTIONS_TAB: action_rows,
-            LOOKER_ADS_TAB: ads_source_rows,
-            LOOKER_RETURNS_TAB: return_source_rows,
-            LOOKER_RETURN_ALL_DETAILS_TAB: return_all_details_source_rows,
-            LOOKER_CUSTOMER_RETURNS_TAB: customer_return_source_rows,
-            LOOKER_COURIER_RETURNS_TAB: courier_return_source_rows,
-            LOOKER_RETURN_TYPE_PIVOT_TAB: return_type_pivot_source_rows,
-            LOOKER_LISTINGS_TAB: listing_source_rows,
+        tab_payloads: Dict[str, Dict[str, Any]] = {
+            LOOKER_EXECUTIVE_TAB: {
+                "headers": LOOKER_HEADERS[LOOKER_EXECUTIVE_TAB],
+                "rows": executive_rows,
+                "source_tab_names": source_ref("FLIPKART_DASHBOARD_DATA", "FLIPKART_SKU_ANALYSIS", "FLIPKART_ALERTS_GENERATED", "FLIPKART_ACTIVE_TASKS", "FLIPKART_ACTION_TRACKER", "FLIPKART_ADS_PLANNER", "FLIPKART_RETURN_ISSUE_SUMMARY"),
+            },
+            LOOKER_FSN_METRICS_TAB: {
+                "headers": LOOKER_HEADERS[LOOKER_FSN_METRICS_TAB],
+                "rows": fsn_metric_rows,
+                "source_tab_names": source_ref("FLIPKART_SKU_ANALYSIS", "FLIPKART_LISTING_PRESENCE", "FLIPKART_MISSING_ACTIVE_LISTINGS", "FLIPKART_ADS_PLANNER", "FLIPKART_RETURN_ISSUE_SUMMARY", "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY", "FLIPKART_COURIER_RETURN_SUMMARY"),
+            },
+            LOOKER_ALERTS_TAB: {
+                "headers": LOOKER_HEADERS[LOOKER_ALERTS_TAB],
+                "rows": alert_rows,
+                "source_tab_names": source_ref("FLIPKART_ALERTS_GENERATED"),
+            },
+            LOOKER_ACTIONS_TAB: {
+                "headers": LOOKER_HEADERS[LOOKER_ACTIONS_TAB],
+                "rows": action_rows,
+                "source_tab_names": source_ref("FLIPKART_ACTION_TRACKER"),
+            },
+            LOOKER_ADS_TAB: {
+                "headers": LOOKER_HEADERS[LOOKER_ADS_TAB],
+                "rows": ads_source_rows,
+                "source_tab_names": source_ref("FLIPKART_ADS_PLANNER"),
+            },
+            LOOKER_RETURNS_TAB: {
+                "headers": LOOKER_HEADERS[LOOKER_RETURNS_TAB],
+                "rows": return_source_rows,
+                "source_tab_names": source_ref("FLIPKART_RETURN_ISSUE_SUMMARY"),
+            },
+            LOOKER_LISTINGS_TAB: {
+                "headers": LOOKER_HEADERS[LOOKER_LISTINGS_TAB],
+                "rows": listing_source_rows,
+                "source_tab_names": source_ref("FLIPKART_LISTING_PRESENCE", "FLIPKART_MISSING_ACTIVE_LISTINGS"),
+            },
+            LOOKER_RUN_COMPARISON_TAB: {
+                "headers": run_comparison_headers,
+                "rows": run_comparison_rows,
+                "source_tab_names": source_ref(run_comparison_source_tab, "FLIPKART_RUN_COMPARISON"),
+            },
+            LOOKER_ADJUSTED_PROFIT_TAB: {
+                "headers": adjusted_profit_headers,
+                "rows": adjusted_profit_rows,
+                "source_tab_names": source_ref(adjusted_profit_source_tab, "FLIPKART_ADJUSTED_PROFIT"),
+            },
+            LOOKER_REPORT_FORMAT_MONITOR_TAB: {
+                "headers": report_format_headers,
+                "rows": report_format_rows,
+                "source_tab_names": source_ref(report_format_source_tab, "FLIPKART_REPORT_FORMAT_MONITOR"),
+            },
+            LOOKER_RUN_QUALITY_TAB: {
+                "headers": looker_run_quality_headers,
+                "rows": looker_run_quality_rows,
+                "source_tab_names": source_ref("FLIPKART_RUN_QUALITY_SCORE", "FLIPKART_RUN_QUALITY_BREAKDOWN"),
+            },
+            LOOKER_MODULE_CONFIDENCE_TAB: {
+                "headers": module_confidence_headers,
+                "rows": module_confidence_rows,
+                "source_tab_names": source_ref(module_confidence_source_tab, "FLIPKART_MODULE_CONFIDENCE"),
+            },
+            LOOKER_DEMAND_PROFILE_TAB: {
+                "headers": demand_looker_headers,
+                "rows": demand_looker_rows,
+                "source_tab_names": source_ref("PRODUCT_TYPE_DEMAND_PROFILE", "GOOGLE_KEYWORD_METRICS_CACHE"),
+            },
+            LOOKER_COMPETITOR_INTELLIGENCE_TAB: {
+                "headers": competitor_headers,
+                "rows": competitor_rows,
+                "source_tab_names": source_ref(competitor_source_tab, "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE"),
+            },
         }
 
-        for tab_name, rows in output_payloads.items():
-            write_output_tab(sheets_service, spreadsheet_id, tab_name, LOOKER_HEADERS[tab_name], rows)
+        if LOOKER_RETURN_ALL_DETAILS_TAB in refresh_tabs:
+            tab_payloads[LOOKER_RETURN_ALL_DETAILS_TAB] = {
+                "headers": LOOKER_HEADERS[LOOKER_RETURN_ALL_DETAILS_TAB],
+                "rows": return_all_details_source_rows,
+                "source_tab_names": source_ref("FLIPKART_RETURN_ALL_DETAILS"),
+            }
+        if LOOKER_CUSTOMER_RETURNS_TAB in refresh_tabs:
+            tab_payloads[LOOKER_CUSTOMER_RETURNS_TAB] = {
+                "headers": LOOKER_HEADERS[LOOKER_CUSTOMER_RETURNS_TAB],
+                "rows": customer_return_source_rows,
+                "source_tab_names": source_ref("FLIPKART_CUSTOMER_RETURN_COMMENTS"),
+            }
+        if LOOKER_COURIER_RETURNS_TAB in refresh_tabs:
+            tab_payloads[LOOKER_COURIER_RETURNS_TAB] = {
+                "headers": LOOKER_HEADERS[LOOKER_COURIER_RETURNS_TAB],
+                "rows": courier_return_source_rows,
+                "source_tab_names": source_ref("FLIPKART_COURIER_RETURN_COMMENTS"),
+            }
+        if LOOKER_RETURN_TYPE_PIVOT_TAB in refresh_tabs:
+            tab_payloads[LOOKER_RETURN_TYPE_PIVOT_TAB] = {
+                "headers": LOOKER_HEADERS[LOOKER_RETURN_TYPE_PIVOT_TAB],
+                "rows": return_type_pivot_source_rows,
+                "source_tab_names": source_ref("FLIPKART_RETURN_TYPE_PIVOT", "FLIPKART_RETURN_ISSUE_SUMMARY"),
+            }
+        if LOOKER_ORDER_ITEM_EXPLORER_TAB in refresh_tabs:
+            tab_payloads[LOOKER_ORDER_ITEM_EXPLORER_TAB] = {
+                "headers": LOOKER_HEADERS[LOOKER_ORDER_ITEM_EXPLORER_TAB],
+                "rows": order_item_rows,
+                "source_tab_names": source_ref("FLIPKART_ORDER_ITEM_EXPLORER"),
+            }
+        if LOOKER_ORDER_ITEM_MASTER_TAB in refresh_tabs:
+            tab_payloads[LOOKER_ORDER_ITEM_MASTER_TAB] = {
+                "headers": LOOKER_HEADERS[LOOKER_ORDER_ITEM_MASTER_TAB],
+                "rows": order_item_master_rows,
+                "source_tab_names": source_ref("FLIPKART_ORDER_ITEM_MASTER", "FLIPKART_ORDER_ITEM_EXPLORER"),
+            }
+        if LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB in refresh_tabs:
+            tab_payloads[LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB] = {
+                "headers": LOOKER_HEADERS[LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB],
+                "rows": order_item_source_detail_rows,
+                "source_tab_names": source_ref("FLIPKART_ORDER_ITEM_SOURCE_DETAIL", "FLIPKART_ORDER_ITEM_EXPLORER", "FLIPKART_ORDER_ITEM_MASTER"),
+            }
 
-        looker_extension_payloads = {
-            LOOKER_RUN_COMPARISON_TAB: (run_comparison_headers, run_comparison_rows),
-            LOOKER_ADJUSTED_PROFIT_TAB: (adjusted_profit_headers, adjusted_profit_rows),
-            LOOKER_REPORT_FORMAT_MONITOR_TAB: (report_format_headers, report_format_rows),
-            LOOKER_RUN_QUALITY_TAB: (looker_run_quality_headers, looker_run_quality_rows),
-            LOOKER_MODULE_CONFIDENCE_TAB: (module_confidence_headers, module_confidence_rows),
-            LOOKER_DEMAND_PROFILE_TAB: (demand_looker_headers, demand_looker_rows),
-            LOOKER_COMPETITOR_INTELLIGENCE_TAB: (competitor_headers, competitor_rows),
-            LOOKER_ORDER_ITEM_EXPLORER_TAB: (order_item_headers, order_item_rows),
-            LOOKER_ORDER_ITEM_MASTER_TAB: (order_item_master_headers, order_item_master_rows),
-            LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB: (order_item_source_detail_headers, order_item_source_detail_rows),
+        selected_output_tabs = [tab_name for tab_name in refresh_tabs if tab_name in tab_payloads]
+        tabs_written: List[str] = []
+        tabs_skipped_unchanged: List[str] = []
+        manifest = _load_looker_refresh_manifest()
+        manifest_tabs = {
+            str(item.get("tab_name", "")): dict(item)
+            for item in manifest.get("tabs", [])
+            if isinstance(item, dict) and str(item.get("tab_name", ""))
         }
 
-        for tab_name, (headers, rows) in looker_extension_payloads.items():
+        def write_tab_if_needed(tab_name: str) -> None:
+            payload = tab_payloads[tab_name]
+            headers = payload["headers"]
+            rows = payload["rows"]
+            source_tab_names = payload.get("source_tab_names", [])
+            content_hash = _hash_looker_rows(headers, rows)
+            existing = manifest_tabs.get(tab_name, {})
+            sheet_exists = tab_exists(sheets_service, spreadsheet_id, tab_name)
+            if not force and sheet_exists and existing.get("content_hash") == content_hash:
+                tabs_skipped_unchanged.append(tab_name)
+                return
             write_output_tab(sheets_service, spreadsheet_id, tab_name, headers, rows)
+            tabs_written.append(tab_name)
+            manifest_tabs[tab_name] = _build_looker_refresh_manifest_entry(
+                tab_name=tab_name,
+                source_tab_names=source_tab_names,
+                headers=headers,
+                rows=rows,
+            )
+
+        for tab_name in selected_output_tabs:
+            try:
+                write_tab_if_needed(tab_name)
+            except HttpError as exc:
+                if not _is_quota_limited_http_error(exc):
+                    raise
+                quota_result = {
+                    "status": "WARNING",
+                    "spreadsheet_id": spreadsheet_id,
+                    "group": selected_group,
+                    "quota_safe_mode": quota_safe_mode,
+                    "message": f"Sheets quota exceeded while writing {tab_name}; wait 5 minutes and rerun",
+                    "failed_tab_name": tab_name,
+                    "tabs_requested": selected_output_tabs,
+                    "tabs_written": tabs_written,
+                    "tabs_skipped_unchanged": tabs_skipped_unchanged,
+                    "large_tabs_skipped": large_tabs_skipped,
+                    "source_tabs_read_count": source_tabs_read_count,
+                    "source_tabs_cache_hits": source_tabs_cache_hits,
+                    "source_tabs_checked": SOURCE_TABS,
+                    "skipped_unchanged_tabs": tabs_skipped_unchanged,
+                    "tabs_updated": tabs_written,
+                    "log_path": str(LOG_PATH),
+                }
+                _save_looker_refresh_manifest({"tabs": list(manifest_tabs.values()), "last_group": selected_group, "quota_safe_mode": quota_safe_mode, "last_written_at": now_iso()})
+                append_csv_log(
+                    LOG_PATH,
+                    [
+                        "timestamp",
+                        "spreadsheet_id",
+                        "run_id",
+                        "report_date",
+                        "executive_rows",
+                        "fsn_metric_rows",
+                        "alert_rows",
+                        "action_rows",
+                        "ads_rows",
+                        "return_rows",
+                        "listing_rows",
+                        "status",
+                        "message",
+                    ],
+                    [
+                        {
+                            "timestamp": now_iso(),
+                            "spreadsheet_id": spreadsheet_id,
+                            "run_id": latest_run_id,
+                            "report_date": report_date,
+                            "executive_rows": len(executive_rows),
+                            "fsn_metric_rows": len(fsn_metric_rows),
+                            "alert_rows": len(alert_rows),
+                            "action_rows": len(action_rows),
+                            "ads_rows": len(ads_source_rows),
+                            "return_rows": len(return_source_rows),
+                            "listing_rows": len(listing_source_rows),
+                            "status": "WARNING",
+                            "message": quota_result["message"],
+                        }
+                    ],
+                )
+                return quota_result
+
+        _save_looker_refresh_manifest(
+            {
+                "last_group": selected_group,
+                "quota_safe_mode": quota_safe_mode,
+                "last_written_at": now_iso(),
+                "tabs": list(manifest_tabs.values()),
+            }
+        )
 
         result = {
             "status": "SUCCESS",
             "spreadsheet_id": spreadsheet_id,
             "run_id": latest_run_id,
             "report_date": report_date,
-            "tabs_updated": LOOKER_TABS,
-            "row_counts": {
-                **{tab_name: len(rows) for tab_name, rows in output_payloads.items()},
-                **{tab_name: len(rows) for tab_name, (_, rows) in looker_extension_payloads.items()},
-            },
+            "group": selected_group,
+            "quota_safe_mode": quota_safe_mode,
+            "tabs_requested": selected_output_tabs,
+            "tabs_written": tabs_written,
+            "tabs_skipped_unchanged": tabs_skipped_unchanged,
+            "skipped_unchanged_tabs": tabs_skipped_unchanged,
+            "large_tabs_skipped": large_tabs_skipped,
+            "source_tabs_read_count": source_tabs_read_count,
+            "source_tabs_cache_hits": source_tabs_cache_hits,
+            "tabs_updated": tabs_written,
+            "row_counts": {tab_name: len(tab_payloads[tab_name]["rows"]) for tab_name in selected_output_tabs},
             "source_tabs_checked": SOURCE_TABS,
             "log_path": str(LOG_PATH),
         }
@@ -1586,7 +1996,7 @@ def create_looker_studio_sources() -> Dict[str, Any]:
                     "return_rows": len(return_source_rows),
                     "listing_rows": len(listing_source_rows),
                     "status": "SUCCESS",
-                    "message": "Rebuilt Looker Studio source tabs for Flipkart",
+                    "message": f"Rebuilt Looker Studio source tabs for Flipkart ({selected_group})",
                 }
             ],
         )
@@ -1623,8 +2033,15 @@ def create_looker_studio_sources() -> Dict[str, Any]:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Build Flipkart Looker Studio source tabs.")
+    parser.add_argument("--group", choices=sorted(LOOKER_GROUP_TABS), default="light", help="Looker refresh group to build. Default: light.")
+    parser.add_argument("--include-large-tabs", action="store_true", help="Include the large audit tabs for the selected group.")
+    parser.add_argument("--force", action="store_true", help="Rewrite tabs even when the content hash matches the last manifest entry.")
+    args = parser.parse_args()
     try:
-        result = create_looker_studio_sources()
+        result = create_looker_studio_sources(group=args.group, include_large_tabs=args.include_large_tabs, force=args.force)
         print(json.dumps(result, indent=2, ensure_ascii=False))
     except Exception as exc:
         print(

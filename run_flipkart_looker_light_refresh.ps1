@@ -19,15 +19,15 @@ try {
         Write-Host 'Running Flipkart Looker light refresh...' -ForegroundColor Cyan
         & python -m src.marketplaces.flipkart.create_looker_studio_sources --group light
         if ($LASTEXITCODE -ne 0) {
-            throw "Flipkart Looker refresh failed with exit code $LASTEXITCODE."
+            throw "Flipkart Looker light refresh failed with exit code $LASTEXITCODE."
         }
-        Write-Host 'Flipkart Looker refresh completed successfully.' -ForegroundColor Green
+        Write-Host 'Flipkart Looker light refresh completed successfully.' -ForegroundColor Green
     }
     finally {
         Pop-Location
     }
 }
 catch {
-    Write-Host "Flipkart Looker refresh failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Flipkart Looker light refresh failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }

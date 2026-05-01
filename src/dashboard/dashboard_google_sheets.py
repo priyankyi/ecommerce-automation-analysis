@@ -496,11 +496,19 @@ def load_dashboard_payload() -> Dict[str, Any]:
             "LOOKER_FLIPKART_ORDER_ITEM_MASTER",
             "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
         ]:
-            if tab_name in available_tabs:
-                frames[tab_name] = read_tab_dataframe(sheets_service, spreadsheet_id, tab_name)
-            else:
+            if tab_name not in available_tabs:
                 frames[tab_name] = pd.DataFrame()
                 missing_tabs.append(tab_name)
+                continue
+            try:
+                frames[tab_name] = read_tab_dataframe(sheets_service, spreadsheet_id, tab_name)
+            except HttpError as exc:
+                status = getattr(exc.resp, "status", None)
+                if status in {400, 404}:
+                    frames[tab_name] = pd.DataFrame()
+                    missing_tabs.append(tab_name)
+                    continue
+                raise
 
         row_counts = {tab_name: int(len(df)) for tab_name, df in frames.items()}
         return {

@@ -18,6 +18,8 @@ from src.marketplaces.flipkart.create_looker_studio_sources import (
     LOOKER_COMPETITOR_INTELLIGENCE_TAB,
     LOOKER_DEMAND_PROFILE_TAB,
     LOOKER_FSN_METRICS_TAB,
+    LOOKER_GROUP_TABS,
+    LOOKER_LARGE_TABS,
     LOOKER_MODULE_CONFIDENCE_TAB,
     LOOKER_ORDER_ITEM_EXPLORER_TAB,
     LOOKER_ORDER_ITEM_MASTER_TAB,
@@ -26,6 +28,7 @@ from src.marketplaces.flipkart.create_looker_studio_sources import (
     LOOKER_REPORT_FORMAT_MONITOR_TAB,
     LOOKER_RUN_COMPARISON_TAB,
     LOOKER_RUN_QUALITY_TAB,
+    LOOKER_REFRESH_MANIFEST_PATH,
     LOOKER_TABS,
     SPREADSHEET_META_PATH,
 )
@@ -34,6 +37,8 @@ from src.marketplaces.flipkart.flipkart_utils import LOG_DIR, clean_fsn, normali
 POST_REFRESH_LOG_PATH = LOG_DIR / "flipkart_post_analysis_refresh_log.csv"
 LOOKER_SOURCE_PATH = PROJECT_ROOT / "src" / "marketplaces" / "flipkart" / "create_looker_studio_sources.py"
 SYSTEM_HEALTH_SOURCE_PATH = PROJECT_ROOT / "src" / "marketplaces" / "flipkart" / "verify_flipkart_system_health.py"
+ORDER_ITEM_REFRESH_MANIFEST_PATH = PROJECT_ROOT / "data" / "output" / "marketplaces" / "flipkart" / "order_item_refresh_manifest.json"
+ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH = PROJECT_ROOT / "data" / "output" / "marketplaces" / "flipkart" / "order_item_looker_refresh_manifest.json"
 
 MANUAL_TABS = [
     "FLIPKART_ACTION_TRACKER",
@@ -180,6 +185,24 @@ def load_latest_runner_summary() -> Dict[str, Any]:
     return summary
 
 
+def load_order_item_looker_manifest() -> Dict[str, Any]:
+    if not ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH.exists():
+        return {}
+    try:
+        return json.loads(ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def load_order_item_refresh_manifest() -> Dict[str, Any]:
+    if not ORDER_ITEM_REFRESH_MANIFEST_PATH.exists():
+        return {}
+    try:
+        return json.loads(ORDER_ITEM_REFRESH_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def _load_spreadsheet_id() -> str:
     if not SPREADSHEET_META_PATH.exists():
         raise FileNotFoundError(f"Missing required file: {SPREADSHEET_META_PATH}")
@@ -258,6 +281,15 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         "order_item_source_detail_has_rows",
         "looker_order_item_master_has_rows",
         "looker_order_item_source_detail_has_rows",
+        "order_item_internal_mode",
+        "order_item_quick_mode_quota_safe",
+        "order_item_large_internal_tabs_optional",
+        "order_item_looker_mode",
+        "order_item_master_looker_present",
+        "order_item_large_looker_tabs_optional",
+        "order_item_source_detail_skipped_ok",
+        "order_item_internal_manifest_exists",
+        "order_item_looker_manifest_exists",
         "return_all_details_has_rows",
         "customer_return_summary_has_rows",
         "courier_return_summary_has_rows",
@@ -265,6 +297,35 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
     looker_required_tabs = LOOKER_TABS_FOR_INTEGRATION
     looker_source_has_new_tabs = all(tab_name in looker_source_text for tab_name in looker_required_tabs)
     system_health_source_has_new_checks = all(key in system_health_source_text for key in required_health_keys)
+    manifest = {}
+    if LOOKER_REFRESH_MANIFEST_PATH.exists():
+        try:
+            manifest = json.loads(LOOKER_REFRESH_MANIFEST_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            manifest = {}
+    looker_group = str(manifest.get("last_group", "light") or "light").lower()
+    quota_safe_mode = bool(manifest.get("quota_safe_mode", looker_group != "full"))
+    order_item_internal_manifest = load_order_item_refresh_manifest()
+    order_item_manifest = load_order_item_looker_manifest()
+    order_item_internal_mode = str(
+        order_item_internal_manifest.get("internal_mode", order_item_internal_manifest.get("last_order_item_internal_mode", "master-only"))
+        or "master-only"
+    ).lower()
+    order_item_looker_mode = str(order_item_manifest.get("looker_mode", order_item_manifest.get("last_order_item_looker_mode", "master-only")) or "master-only").lower()
+    order_item_large_internal_tabs_optional = order_item_internal_mode != "full"
+    order_item_large_looker_tabs_optional = order_item_looker_mode != "full"
+    light_tabs = list(LOOKER_GROUP_TABS.get("light", []))
+    sheet_required_looker_tabs = list(LOOKER_TABS if looker_group == "full" else light_tabs)
+    if order_item_large_looker_tabs_optional:
+        sheet_required_looker_tabs = [
+            tab_name
+            for tab_name in sheet_required_looker_tabs
+            if tab_name not in {
+                LOOKER_ORDER_ITEM_EXPLORER_TAB,
+                LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB,
+            }
+        ]
+    large_tabs_optional = looker_group != "full"
 
     warnings: List[str] = []
     if not keyword_cache_rows:
@@ -344,7 +405,11 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         "runner_default_safe": default_refresh_safe,
         "looker_source_has_new_tabs": looker_source_has_new_tabs,
         "system_health_source_has_new_checks": system_health_source_has_new_checks,
-        "new_looker_tabs_exist": looker_tabs_exist,
+        "new_looker_tabs_exist": all(tab in available_tabs for tab in sheet_required_looker_tabs),
+        "looker_manifest_exists": LOOKER_REFRESH_MANIFEST_PATH.exists(),
+        "looker_light_tabs_exist": all(tab in available_tabs for tab in light_tabs),
+        "looker_large_tabs_optional": large_tabs_optional or all(tab in available_tabs for tab in LOOKER_LARGE_TABS),
+        "looker_refresh_quota_safe_mode": quota_safe_mode,
         "manual_tabs_exist": manual_tabs_exist,
         "key_generated_tabs_exist": key_generated_tabs_exist,
         "module_confidence_matches_sku_analysis": module_confidence_matches_sku,
@@ -355,12 +420,20 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         "demand_profile_has_rows": demand_profile_has_rows,
         "looker_fsn_metrics_has_return_fields": looker_fsn_metrics_has_return_fields,
         "looker_returns_has_return_fields": looker_returns_has_return_fields,
-        "order_item_explorer_has_rows": row_counts["FLIPKART_ORDER_ITEM_EXPLORER"] > 0 and row_counts[LOOKER_ORDER_ITEM_EXPLORER_TAB] > 0,
+        "order_item_explorer_has_rows": order_item_large_internal_tabs_optional or row_counts["FLIPKART_ORDER_ITEM_EXPLORER"] > 0,
         "order_item_master_has_rows": row_counts["FLIPKART_ORDER_ITEM_MASTER"] > 0 and row_counts[LOOKER_ORDER_ITEM_MASTER_TAB] > 0,
-        "order_item_source_detail_has_rows": row_counts["FLIPKART_ORDER_ITEM_SOURCE_DETAIL"] > 0 and row_counts[LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB] > 0,
-        "looker_order_item_explorer_has_rows": row_counts[LOOKER_ORDER_ITEM_EXPLORER_TAB] > 0,
+        "order_item_source_detail_has_rows": order_item_large_internal_tabs_optional or row_counts["FLIPKART_ORDER_ITEM_SOURCE_DETAIL"] > 0,
+        "looker_order_item_explorer_has_rows": order_item_large_looker_tabs_optional or row_counts[LOOKER_ORDER_ITEM_EXPLORER_TAB] > 0,
         "looker_order_item_master_has_rows": row_counts[LOOKER_ORDER_ITEM_MASTER_TAB] > 0,
-        "looker_order_item_source_detail_has_rows": row_counts[LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB] > 0,
+        "looker_order_item_source_detail_has_rows": order_item_large_looker_tabs_optional or row_counts[LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB] > 0,
+        "order_item_master_looker_present": row_counts[LOOKER_ORDER_ITEM_MASTER_TAB] > 0,
+        "order_item_internal_mode": order_item_internal_mode,
+        "order_item_quick_mode_quota_safe": order_item_large_internal_tabs_optional and order_item_large_looker_tabs_optional,
+        "order_item_large_internal_tabs_optional": order_item_large_internal_tabs_optional,
+        "order_item_large_looker_tabs_optional": order_item_large_looker_tabs_optional,
+        "order_item_source_detail_skipped_ok": order_item_large_looker_tabs_optional or row_counts[LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB] > 0,
+        "order_item_internal_manifest_exists": ORDER_ITEM_REFRESH_MANIFEST_PATH.exists(),
+        "order_item_looker_manifest_exists": ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH.exists(),
     }
 
     status = "PASS_WITH_WARNINGS" if all(checks.values()) and warnings else ("PASS" if all(checks.values()) else "FAIL")
@@ -380,6 +453,10 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
             "tabs_refreshed": runner_summary.get("tabs_refreshed", []),
             "status": runner_summary.get("status", ""),
         },
+        "order_item_looker_mode": order_item_looker_mode,
+        "order_item_internal_mode": order_item_internal_mode,
+        "order_item_internal_manifest_path": str(ORDER_ITEM_REFRESH_MANIFEST_PATH),
+        "order_item_looker_manifest_path": str(ORDER_ITEM_LOOKER_REFRESH_MANIFEST_PATH),
         "looker_summary": {
             "status": "NOT_RUN",
             "tabs_checked": LOOKER_TABS_FOR_INTEGRATION,

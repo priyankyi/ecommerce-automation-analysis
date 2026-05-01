@@ -1410,6 +1410,8 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
         "Master view first, with source detail below for audit. Use the master table for daily work and the source detail only when you need to trace a value back to its report row.",
         latest_non_blank_value(order_df, ["Run_ID"]),
     )
+    if source_detail_df.empty:
+        st.warning("Order Item source detail is unavailable or empty right now. The master view still works normally.")
     if order_df.empty:
         st.info("No order-item master rows are available yet.")
         return
