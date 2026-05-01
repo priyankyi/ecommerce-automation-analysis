@@ -1961,6 +1961,30 @@ def selected_rows_for_fsn(df: pd.DataFrame, fsn: str) -> pd.DataFrame:
     return df[df["FSN"].fillna("").map(clean_fsn) == clean_fsn(fsn)].copy()
 
 
+def first_row_or_empty(df: pd.DataFrame) -> pd.Series:
+    if df.empty:
+        return pd.Series(dtype="object")
+    return df.iloc[0]
+
+
+def row_value(row: pd.Series, *candidates: str) -> str:
+    for candidate in candidates:
+        value = normalize_text(row.get(candidate, ""))
+        if value:
+            return value
+    return ""
+
+
+def display_rate_from_counts(numerator_value: Any, denominator_value: Any, explicit_rate_value: Any = "") -> str:
+    explicit_rate_text = normalize_text(explicit_rate_value)
+    if explicit_rate_text:
+        return format_percent(explicit_rate_text)
+    denominator = parse_float(denominator_value)
+    if denominator <= 0:
+        return "-"
+    return format_percent(parse_float(numerator_value) / denominator)
+
+
 def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[str, str]) -> None:
     candidates = build_fsn_candidates(frames, search_filters)
     render_page_header(
@@ -1983,6 +2007,7 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
     ads_df = selected_rows_for_fsn(dataframe_or_empty(frames[ADS_TAB]), selected_fsn)
     order_item_master_df = selected_rows_for_fsn(dataframe_or_empty(frames[ORDER_ITEM_MASTER_TAB]), selected_fsn)
     order_item_source_detail_df = selected_rows_for_fsn(dataframe_or_empty(frames[ORDER_ITEM_SOURCE_DETAIL_TAB]), selected_fsn)
+    return_metrics_df = selected_rows_for_fsn(dataframe_or_empty(frames[RETURNS_TAB]), selected_fsn)
     all_returns_df = selected_rows_for_fsn(dataframe_or_empty(frames[RETURN_ALL_DETAILS_TAB]), selected_fsn)
     customer_summary_df = selected_rows_for_fsn(dataframe_or_empty(frames[CUSTOMER_RETURN_SUMMARY_TAB]), selected_fsn)
     courier_summary_df = selected_rows_for_fsn(dataframe_or_empty(frames[COURIER_RETURN_SUMMARY_TAB]), selected_fsn)
@@ -1994,64 +2019,166 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
     confidence_df = selected_rows_for_fsn(dataframe_or_empty(frames[MODULE_CONFIDENCE_TAB]), selected_fsn)
     competitor_df = selected_rows_for_fsn(dataframe_or_empty(frames[COMPETITOR_TAB]), selected_fsn)
 
-    summary_source = fsn_metrics_df if not fsn_metrics_df.empty else candidates.loc[candidates["FSN"] == selected_fsn].copy()
-    summary_row = summary_source.iloc[0] if not summary_source.empty else pd.Series(dtype="object")
-    title = normalize_text(summary_row.get("Product_Title", "")) or normalize_text(selected_row.get("Product_Title", "")) or "-"
-    sku = normalize_text(summary_row.get("SKU_ID", "")) or normalize_text(selected_row.get("SKU_ID", "")) or "-"
-    category = normalize_text(summary_row.get("Category", "")) or "-"
-    customer_return_count = normalize_text(summary_row.get("Customer_Return_Count", "")) or normalize_text(summary_row.get("Returns", "")) or "0"
-    customer_return_rate = normalize_text(summary_row.get("Customer_Return_Rate", "")) or normalize_text(summary_row.get("Return_Rate", "")) or "0"
-    courier_return_count = normalize_text(summary_row.get("Courier_Return_Count", "")) or "0"
-    courier_return_rate = normalize_text(summary_row.get("Courier_Return_Rate", "")) or "0"
-    total_return_count = normalize_text(summary_row.get("Total_Return_Count", "")) or normalize_text(summary_row.get("Returns", "")) or "0"
-    total_return_rate = normalize_text(summary_row.get("Total_Return_Rate", "")) or normalize_text(summary_row.get("Return_Rate", "")) or "0"
+    summary_row = first_row_or_empty(fsn_metrics_df)
+    return_row = first_row_or_empty(return_metrics_df)
+    listing_row = first_row_or_empty(listings_df)
+    ads_row = first_row_or_empty(ads_df)
+
+    orders_value = row_value(summary_row, "Orders")
+    title = row_value(summary_row, "Product_Title") or row_value(selected_row, "Product_Title") or "-"
+    sku = row_value(summary_row, "SKU_ID") or row_value(selected_row, "SKU_ID") or "-"
+    category = row_value(summary_row, "Category") or "-"
+    listing_status = row_value(listing_row, "Listing_Presence_Status", "Target_FSN_Status", "Detected_Status") or row_value(summary_row, "Listing_Presence_Status") or "-"
+    marketplace_returns = row_value(summary_row, "Returns") or row_value(return_row, "Total_Returns_In_Detailed_Report")
+    customer_return_count = row_value(return_row, "Customer_Return_Count")
+    courier_return_count = row_value(return_row, "Courier_Return_Count")
+    unknown_return_count = row_value(return_row, "Unknown_Return_Count")
+    total_detailed_returns = row_value(return_row, "Total_Returns_In_Detailed_Report") or row_value(return_row, "Total_Return_Count")
+    customer_return_rate = display_rate_from_counts(customer_return_count, orders_value, row_value(return_row, "Customer_Return_Rate"))
+    courier_return_rate = display_rate_from_counts(courier_return_count, orders_value, row_value(return_row, "Courier_Return_Rate"))
+    total_return_rate = display_rate_from_counts(total_detailed_returns, orders_value, row_value(return_row, "Total_Return_Rate"))
+    top_issue_category = row_value(return_row, "Top_Issue_Category")
+    top_return_reason = row_value(return_row, "Top_Return_Reason")
+    suggested_return_action = row_value(return_row, "Suggested_Return_Action")
+    return_action_priority = row_value(return_row, "Return_Action_Priority")
+    alert_count = len(alerts_df)
+    active_task_count = len(current_tasks_df)
+    cogs_status = row_value(summary_row, "COGS_Status") or "-"
+    final_ads_decision = row_value(summary_row, "Final_Ads_Decision") or row_value(ads_row, "Final_Ads_Decision") or "-"
+    net_settlement = row_value(summary_row, "Net_Settlement")
+    final_net_profit = row_value(summary_row, "Final_Net_Profit") or row_value(summary_row, "Adjusted_Final_Net_Profit")
+    final_profit_margin = row_value(summary_row, "Final_Profit_Margin")
+    units_sold = row_value(summary_row, "Units_Sold")
+    gross_sales = row_value(summary_row, "Gross_Sales")
     render_metric_cards(
         [
             {"label": "FSN", "value": selected_fsn, "note": title},
             {"label": "SKU", "value": sku, "note": category},
-            {"label": "Alerts", "value": f"{len(alerts_df):,}", "note": "Matching alert rows"},
-            {"label": "Active Tasks", "value": f"{len(current_tasks_df):,}", "note": "Current task rows"},
+            {"label": "Alerts", "value": f"{alert_count:,}", "note": "Matching alert rows"},
+            {"label": "Active Tasks", "value": f"{active_task_count:,}", "note": "Current task rows"},
             {"label": "Profit Rows", "value": f"{len(profit_df):,}", "note": "Adjustment-aware profit"},
             {"label": "Order Item Master Rows", "value": f"{len(order_item_master_df):,}", "note": "Master rows for this FSN"},
-            {"label": "Customer Return Count", "value": customer_return_count, "note": f"Rate {customer_return_rate}"},
-            {"label": "Courier Return Count", "value": courier_return_count, "note": f"Rate {courier_return_rate}"},
-            {"label": "Total Return Count", "value": total_return_count, "note": f"Rate {total_return_rate}"},
+            {"label": "Customer Return Count", "value": customer_return_count or "0", "note": f"Rate {customer_return_rate}"},
+            {"label": "Courier Return Count", "value": courier_return_count or "0", "note": f"Rate {courier_return_rate}"},
+            {"label": "Total Return Count", "value": total_detailed_returns or "0", "note": f"Rate {total_return_rate}"},
             {"label": "Listings", "value": f"{len(listings_df):,}", "note": "Listing presence rows"},
             {"label": "Competitor Risk", "value": format_text_or_dash(latest_non_blank_value(competitor_df, ["Competition_Risk_Level"])), "note": "Comparable competitor view"},
         ],
         columns=4,
     )
 
-    core_summary_rows: List[Dict[str, Any]] = []
-    for source_name, df, preferred_columns in [
-        ("FSN Metrics", fsn_metrics_df, ["FSN", "SKU_ID", "Product_Title", "Category", "Listing_Presence_Status", "Orders", "Units_Sold", "Gross_Sales", "Customer_Return_Count", "Customer_Return_Rate", "Courier_Return_Count", "Courier_Return_Rate", "Total_Return_Count", "Total_Return_Rate", "Returns", "Return_Rate", "Net_Settlement", "Final_Net_Profit", "Final_Profit_Margin", "COGS_Status", "Final_Action", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"]),
-        ("Adjusted Profit", profit_df, ["FSN", "SKU_ID", "Product_Title", "Original_Final_Net_Profit", "Total_Adjustment_Additions", "Total_Adjustment_Deductions", "Net_Adjustment", "Adjusted_Final_Net_Profit", "Adjustment_Count", "Adjustment_Status", "Last_Updated"]),
-        ("Ads", ads_df, ["FSN", "SKU_ID", "Product_Title", "Final_Product_Type", "Final_Seasonality_Tag", "Ad_Run_Type", "Current_Ad_Status", "Ad_ROAS", "Ad_ACOS", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"]),
-        ("Customer Returns", customer_summary_df, ["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Customer_Return_Count", "Customer_Return_Rate", "Quality_Issue_Count", "Defective_Product_Count", "Damaged_Product_Count", "Missing_Item_Count", "Wrong_Product_Count", "Customer_Remorse_Count", "Top_Customer_Return_Reason", "Top_Customer_Return_Sub_Reason", "Customer_Return_Risk_Level", "Suggested_Action", "Data_Gap_Reason", "Last_Updated"]),
-        ("Courier Returns", courier_summary_df, ["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Courier_Return_Count", "Courier_Return_Rate", "Order_Cancelled_Count", "Attempts_Exhausted_Count", "Shipment_Ageing_Count", "Not_Serviceable_Count", "ORC_Validated_Count", "Delivery_Failed_Count", "Top_Courier_Return_Reason", "Top_Courier_Return_Sub_Reason", "Courier_Return_Risk_Level", "Suggested_Action", "Data_Gap_Reason", "Last_Updated"]),
-        ("Order Item Master", order_item_master_df, ["Run_ID", "Order_ID", "Order_Item_ID", "Master_Order_Key", "FSN", "SKU_ID", "Product_Title", "Order_Date", "Latest_Event_Date", "Selling_Price", "Settlement_Amount", "Net_Profit", "Return_YN", "Return_Type_Final", "Customer_Return_YN", "Courier_Return_YN", "Data_Completeness_Status", "Data_Gap_Reason", "Last_Updated"]),
-        ("Listings", listings_df, ["FSN", "SKU_ID", "Product_Title", "Found_In_Active_Listing", "Listing_Presence_Status", "Possible_Issue", "Suggested_Action", "Priority", "Last_Updated"]),
-        ("Confidence", confidence_df, ["FSN", "SKU_ID", "Product_Title", "Overall_Confidence_Score", "Overall_Confidence_Status", "Primary_Data_Gap", "Suggested_Data_Action", "COGS_Confidence_Status", "Ads_Confidence_Status", "Format_Confidence_Status", "Alert_Risk_Status", "Last_Updated"]),
-        ("Competitor", competitor_df, ["FSN", "SKU_ID", "Product_Title", "Comparable_Competitor_Count", "Median_Comparable_Competitor_Unit_Price", "Price_Gap_Percent", "Competition_Risk_Score", "Competition_Risk_Level", "Suggested_Action", "Confidence", "Last_Updated"]),
-    ]:
-        if df.empty:
-            continue
-        row = df.iloc[0]
-        row_payload = {"Source": source_name}
-        for column in preferred_columns:
-            if column in df.columns:
-                row_payload[column] = row.get(column, "")
-        core_summary_rows.append(row_payload)
-
-    core_summary_df = pd.DataFrame(core_summary_rows)
-    render_dataframe_section(
-        "Core Snapshot",
-        core_summary_df,
-        "flipkart_fsn_core_snapshot.csv",
-        caption="One row per source tab so the current FSN can be reviewed at a glance.",
-        preferred_columns=[column for column in core_summary_df.columns if column != "Source"],
-        style_columns={"Overall_Confidence_Status": CONFIDENCE_PALETTE, "Competition_Risk_Level": RISK_PALETTE, "Final_Ads_Decision": DECISION_PALETTE, "Adjustment_Status": STATUS_PALETTE},
+    st.markdown("### Core Snapshot")
+    render_metric_cards(
+        [
+            {"label": "Identity", "value": selected_fsn, "note": title},
+            {"label": "Sales", "value": orders_value or "-", "note": f"Units {units_sold or '-'} | Gross {gross_sales or '-'}"},
+            {"label": "Returns", "value": marketplace_returns or total_detailed_returns or "-", "note": f"Customer {customer_return_count or '0'} | Courier {courier_return_count or '0'}"},
+            {"label": "Operations", "value": f"Alerts {alert_count:,} | Tasks {active_task_count:,}", "note": f"COGS {cogs_status} | Ads {final_ads_decision}"},
+        ],
+        columns=2,
     )
+
+    def render_summary_block(title_text: str, rows: List[tuple[str, Any]]) -> None:
+        summary_df = pd.DataFrame(rows, columns=["Field", "Value"])
+        st.markdown(f"#### {title_text}")
+        st.dataframe(apply_table_styles(summary_df), use_container_width=True, height=min(360, 36 + 34 * max(4, len(summary_df))))
+
+    render_summary_block(
+        "Identity",
+        [
+            ("FSN", selected_fsn),
+            ("SKU ID", sku),
+            ("Product Title", title),
+            ("Category", category),
+            ("Listing Status", listing_status),
+        ],
+    )
+    render_summary_block(
+        "Sales",
+        [
+            ("Orders", orders_value or "-"),
+            ("Units Sold", units_sold or "-"),
+            ("Gross Sales", gross_sales or "-"),
+            ("Net Settlement", net_settlement or "-"),
+            ("Final Net Profit", final_net_profit or "-"),
+            ("Final Profit Margin", final_profit_margin or "-"),
+        ],
+    )
+    render_summary_block(
+        "Returns",
+        [
+            ("Marketplace Returns", marketplace_returns or "-"),
+            ("Customer Returns", customer_return_count or "-"),
+            ("Courier Returns", courier_return_count or "-"),
+            ("Unknown Returns", unknown_return_count or "-"),
+            ("Total Detailed Returns", total_detailed_returns or "-"),
+            ("Customer Return Rate", customer_return_rate),
+            ("Courier Return Rate", courier_return_rate),
+            ("Total Detailed Return Rate", total_return_rate),
+            ("Top Issue Category", top_issue_category or "-"),
+            ("Top Return Reason", top_return_reason or "-"),
+            ("Suggested Return Action", suggested_return_action or "-"),
+            ("Return Action Priority", return_action_priority or "-"),
+        ],
+    )
+    render_summary_block(
+        "Operations",
+        [
+            ("Alert Count", f"{alert_count:,}"),
+            ("Active Task Count", f"{active_task_count:,}"),
+            ("COGS Status", cogs_status),
+            ("Final Ads Decision", final_ads_decision),
+        ],
+    )
+
+    with st.expander("Raw Source Rows / Debug View", expanded=False):
+        render_dataframe_section(
+            "FSN Metrics Raw",
+            fsn_metrics_df,
+            "flipkart_fsn_metrics_raw.csv",
+            preferred_columns=[column for column in ["Run_ID", "FSN", "SKU_ID", "Product_Title", "Category", "Listing_Presence_Status", "Orders", "Units_Sold", "Gross_Sales", "Returns", "Return_Rate", "Customer_Return_Count", "Courier_Return_Count", "Unknown_Return_Count", "Total_Return_Count", "Customer_Return_Rate", "Courier_Return_Rate", "Total_Return_Rate", "Net_Settlement", "Final_Net_Profit", "Final_Profit_Margin", "COGS_Status", "Final_Action", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"] if column in fsn_metrics_df.columns],
+        )
+        render_dataframe_section(
+            "Returns Raw",
+            return_metrics_df,
+            "flipkart_returns_raw.csv",
+            preferred_columns=[column for column in ["Run_ID", "FSN", "SKU_ID", "Product_Title", "Total_Returns_In_Detailed_Report", "Customer_Return_Count", "Courier_Return_Count", "Unknown_Return_Count", "Customer_Return_Rate", "Courier_Return_Rate", "Total_Return_Rate", "Top_Issue_Category", "Top_Return_Reason", "Suggested_Return_Action", "Return_Action_Priority", "Last_Updated"] if column in return_metrics_df.columns],
+        )
+        render_dataframe_section(
+            "Listing Raw",
+            listings_df,
+            "flipkart_listings_raw.csv",
+            preferred_columns=[column for column in ["FSN", "SKU_ID", "Product_Title", "Found_In_Active_Listing", "Listing_Presence_Status", "Possible_Issue", "Suggested_Action", "Priority", "Last_Updated"] if column in listings_df.columns],
+        )
+        render_dataframe_section(
+            "Alerts Raw",
+            alerts_df,
+            "flipkart_alerts_raw.csv",
+            preferred_columns=[column for column in ["Run_ID", "Alert_ID", "FSN", "SKU_ID", "Product_Title", "Alert_Type", "Severity", "Suggested_Action", "Reason", "Data_Confidence", "Status_Default", "Last_Updated"] if column in alerts_df.columns],
+            style_columns={"Severity": SEVERITY_PALETTE},
+        )
+        render_dataframe_section(
+            "Active Tasks Raw",
+            current_tasks_df,
+            "flipkart_active_tasks_raw.csv",
+            preferred_columns=[column for column in ["Alert_ID", "Run_ID", "FSN", "SKU_ID", "Product_Title", "Alert_Type", "Severity", "Suggested_Action", "Reason", "Owner", "Status", "Action_Taken", "Action_Date", "Review_After_Date", "Days_Open", "Data_Confidence", "Trigger_Value", "Threshold", "Last_Updated"] if column in current_tasks_df.columns],
+            style_columns={"Severity": SEVERITY_PALETTE, "Status": STATUS_PALETTE},
+        )
+        render_dataframe_section(
+            "Action Tracker History Raw",
+            actions_df,
+            "flipkart_action_tracker_history_raw.csv",
+            preferred_columns=[column for column in ["Action_ID", "Alert_ID", "FSN", "SKU_ID", "Product_Title", "Alert_Type", "Severity", "Owner", "Status", "Action_Taken", "Action_Date", "Expected_Impact", "Review_After_Date", "Resolution_Notes", "Last_Updated"] if column in actions_df.columns],
+            style_columns={"Status": STATUS_PALETTE, "Severity": SEVERITY_PALETTE},
+        )
+        render_dataframe_section(
+            "Order Item Source Detail Raw",
+            order_item_source_detail_df,
+            "flipkart_order_item_source_detail_raw.csv",
+            preferred_columns=[column for column in ["Source_File", "Source_Tab", "Source_Row_Type", "Order_ID", "Order_Item_ID", "Return_ID", "FSN", "SKU_ID", "Product_Title", "Order_Date", "Settlement_Date", "Return_Date", "Quantity", "Selling_Price", "Settlement_Amount", "Net_Profit", "Return_Type", "Customer_Return_YN", "Courier_Return_YN", "Return_Status", "Return_Reason", "Return_Sub_Reason", "Alert_Count", "Critical_Alert_Count", "Final_Ads_Decision", "Competition_Risk_Level", "Data_Gap_Reason", "Last_Updated"] if column in order_item_source_detail_df.columns],
+            style_columns={"Source_Row_Type": STATUS_PALETTE, "Return_Type": STATUS_PALETTE, "Customer_Return_YN": STATUS_PALETTE, "Courier_Return_YN": STATUS_PALETTE},
+        )
+
     render_dataframe_section(
         "Alerts for Selected FSN",
         alerts_df,
