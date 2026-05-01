@@ -36,6 +36,7 @@ LOG_PATH = LOG_DIR / "flipkart_ads_planner_foundation_log.csv"
 SKU_ANALYSIS_TAB = "FLIPKART_SKU_ANALYSIS"
 COST_MASTER_TAB = "FLIPKART_COST_MASTER"
 RETURN_ISSUE_SUMMARY_TAB = "FLIPKART_RETURN_ISSUE_SUMMARY"
+RETURN_TYPE_PIVOT_TAB = "FLIPKART_RETURN_TYPE_PIVOT"
 ALERTS_TAB = "FLIPKART_ALERTS_GENERATED"
 ACTIVE_TASKS_TAB = "FLIPKART_ACTIVE_TASKS"
 FSN_HISTORY_TAB = "FLIPKART_FSN_HISTORY"
@@ -319,6 +320,14 @@ def load_json(path: Path) -> Dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Missing required file: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def pick_first_nonblank(*values: Any) -> str:
+    for value in values:
+        text = normalize_text(value)
+        if text:
+            return text
+    return ""
 
 
 def get_metadata(sheets_service, spreadsheet_id: str) -> Dict[str, Any]:
@@ -759,13 +768,28 @@ def classify_readiness(
         else:
             profit_readiness = "Moderate"
 
-    return_rate = parse_float(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")))
-    if return_rate >= 0.50:
-        return_readiness = "Critical"
-    elif return_rate >= 0.20:
-        return_readiness = "Bad"
-    elif return_rate < 0.15:
-        return_readiness = "Good"
+    customer_return_rate = parse_float(return_row.get("Customer_Return_Rate", ""))
+    courier_return_rate = parse_float(return_row.get("Courier_Return_Rate", ""))
+    total_return_rate = parse_float(
+        pick_first_nonblank(
+            return_row.get("Total_Return_Rate", ""),
+            analysis_row.get("Total_Return_Rate", ""),
+            analysis_row.get("Return_Rate", ""),
+        )
+    )
+    split_available = bool(
+        normalize_text(return_row.get("Customer_Return_Rate", ""))
+        or normalize_text(return_row.get("Courier_Return_Rate", ""))
+    )
+    if split_available:
+        if customer_return_rate >= 0.50:
+            return_readiness = "Critical"
+        elif customer_return_rate >= 0.20:
+            return_readiness = "Bad"
+        elif customer_return_rate < 0.15:
+            return_readiness = "Good"
+        else:
+            return_readiness = "Review"
     else:
         return_readiness = "Review"
 
@@ -817,7 +841,21 @@ def build_ads_action(
     cogs_missing = readiness["COGS_Readiness"] != "Ready"
     final_net_profit = parse_float(analysis_row.get("Final_Net_Profit", ""))
     final_profit_margin = parse_float(analysis_row.get("Final_Profit_Margin", ""))
-    return_rate = parse_float(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")))
+    customer_return_rate = parse_float(return_row.get("Customer_Return_Rate", ""))
+    courier_return_rate = parse_float(return_row.get("Courier_Return_Rate", ""))
+    total_return_rate = parse_float(
+        pick_first_nonblank(
+            return_row.get("Total_Return_Rate", ""),
+            analysis_row.get("Total_Return_Rate", ""),
+            analysis_row.get("Return_Rate", ""),
+        )
+    )
+    split_available = bool(
+        normalize_text(return_row.get("Customer_Return_Rate", ""))
+        or normalize_text(return_row.get("Courier_Return_Rate", ""))
+    )
+    if not split_available:
+        return "Review Return Split", "Manual Review", "Return split missing; review manually"
     listing_status = normalize_text(analysis_row.get("Listing_Status", ""))
     active_severity = normalize_text(active_task_row.get("Severity", ""))
     product_type_norm = normalize_text(final_product_type)
@@ -828,14 +866,18 @@ def build_ads_action(
         return "Fill COGS First", "Manual Review", "COGS missing"
     if final_net_profit < 0:
         return "Do Not Run Ads", "Do Not Run", "Final net profit is negative"
-    if final_profit_margin < 0.10 and readiness["COGS_Readiness"] == "Ready":
+    if final_profit_margin < 0.10 and readiness["COGS_Readiness"] == "Ready" and not split_available:
         return "Do Not Run Ads / Improve Economics", "Do Not Run", "Final profit margin is below 10%"
-    if return_rate >= 0.50:
-        return "Fix Product First", "Do Not Run", "Return rate is critical"
-    if return_rate >= 0.20:
-        return "Fix Product/Listing First", "Do Not Run", "Return rate is elevated"
+    if split_available and customer_return_rate >= 0.20 and final_profit_margin < 0.10:
+        return "Do Not Run Ads / Improve Product First", "Do Not Run", "Customer return rate is critical and margin is weak"
+    if split_available and customer_return_rate >= 0.50:
+        return "Fix Product First", "Do Not Run", "Customer return rate is critical"
+    if split_available and customer_return_rate >= 0.20:
+        return "Test Ads Carefully / Fix Product First", "Low Test", "Customer return rate is elevated"
+    if split_available and customer_return_rate < 0.20 and courier_return_rate >= 0.20:
+        return "Test Ads Carefully / Check Logistics", "Low Test", "Customer return rate acceptable; courier return risk elevated"
     if any(token in listing_status.lower() for token in ("missing", "inactive", "blocked", "not active", "unlisted", "paused")):
-        return "Fix Listing First", "Do Not Run", "Listing is missing or not active"
+        return "Fix Product/Listing First", "Do Not Run", "Listing is missing or not active"
     if active_severity == "Critical":
         return "Resolve Critical Alert First", "Manual Review", "Critical active alert exists"
 
@@ -854,12 +896,20 @@ def build_ads_action(
     if "Year-Round" in seasonality_norm and "Festive Boost" in seasonality_norm:
         return "Test Ads", "Medium Test", "Year-round base with festive boost"
 
+    if split_available and customer_return_rate < 0.15 and readiness["Profit_Readiness"] == "Strong" and ads_metrics["ads_data_available"] and safe_float(ads_metrics["ad_acos"]) <= 0.20 and safe_float(ads_metrics["ad_roas"]) >= 5:
+        return "Scale Ads", "Medium Test", "Customer return rate is low and mapped ads performance is strong"
+    if split_available and customer_return_rate < 0.15 and readiness["Profit_Readiness"] == "Strong" and ads_metrics["ads_data_available"]:
+        return "Continue / Optimize Ads", "Medium Test", "Customer return rate is low and ads are healthy"
     if readiness["Alert_Readiness"] == "Review":
         reasons.append("High active alert exists")
     if readiness["Data_Readiness"] == "Review":
         reasons.append("Data confidence is not HIGH")
     if not reasons:
         reasons.append("Monitor internal readiness")
+    if split_available and courier_return_rate >= 0.20:
+        reasons.insert(0, "Customer return rate acceptable; courier return risk elevated")
+    elif split_available and customer_return_rate >= 0.20:
+        reasons.insert(0, "Customer return rate elevated")
     return "Monitor", "Manual Review", "; ".join(reasons)
 
 
@@ -868,10 +918,12 @@ def readiness_status(suggested_action: str, readiness: Dict[str, str]) -> str:
         "Fill COGS First",
         "Do Not Run Ads",
         "Do Not Run Ads / Improve Economics",
+        "Do Not Run Ads / Improve Product First",
         "Fix Product First",
         "Fix Product/Listing First",
         "Fix Listing First",
         "Resolve Critical Alert First",
+        "Review Return Split",
     }:
         return "Blocked"
     if suggested_action in {"Seasonal Ads Later / Prepare Listing First"}:
@@ -895,7 +947,7 @@ def recommendation_confidence(
         return "Manual"
     if final_product_type == "Unknown":
         return "Low"
-    if suggested_action in {"Do Not Run Ads", "Do Not Run Ads / Improve Economics", "Fix Product First", "Fix Product/Listing First", "Fix Listing First", "Resolve Critical Alert First"}:
+    if suggested_action in {"Do Not Run Ads", "Do Not Run Ads / Improve Economics", "Do Not Run Ads / Improve Product First", "Fix Product First", "Fix Product/Listing First", "Fix Listing First", "Resolve Critical Alert First", "Review Return Split"}:
         return "Low"
     if readiness["COGS_Readiness"] == "Ready" and readiness["Profit_Readiness"] == "Strong" and readiness["Return_Readiness"] == "Good" and readiness["Listing_Readiness"] == "Good" and readiness["Alert_Readiness"] == "Good" and readiness["Data_Readiness"] == "Good":
         return "High"
@@ -1023,6 +1075,11 @@ def load_required_tabs(sheets_service, spreadsheet_id: str) -> Dict[str, Dict[st
             raise FileNotFoundError(f"Missing required Google Sheet tab: {tab_name}")
         headers, rows = read_table(sheets_service, spreadsheet_id, tab_name)
         payload[tab_name] = {"headers": headers, "rows": rows}
+    if tab_exists(sheets_service, spreadsheet_id, RETURN_TYPE_PIVOT_TAB):
+        headers, rows = read_table(sheets_service, spreadsheet_id, RETURN_TYPE_PIVOT_TAB)
+        payload[RETURN_TYPE_PIVOT_TAB] = {"headers": headers, "rows": rows}
+    else:
+        payload[RETURN_TYPE_PIVOT_TAB] = {"headers": [], "rows": []}
     if tab_exists(sheets_service, spreadsheet_id, FSN_HISTORY_TAB):
         headers, rows = read_table(sheets_service, spreadsheet_id, FSN_HISTORY_TAB)
         payload[FSN_HISTORY_TAB] = {"headers": headers, "rows": rows}
@@ -1068,7 +1125,7 @@ def create_flipkart_ads_planner_foundation() -> Dict[str, Any]:
 
     analysis_headers, analysis_rows = source_tabs[SKU_ANALYSIS_TAB]["headers"], source_tabs[SKU_ANALYSIS_TAB]["rows"]
     cost_rows = source_tabs[COST_MASTER_TAB]["rows"]
-    return_summary_rows = source_tabs[RETURN_ISSUE_SUMMARY_TAB]["rows"]
+    return_summary_rows = source_tabs[RETURN_TYPE_PIVOT_TAB]["rows"] or source_tabs[RETURN_ISSUE_SUMMARY_TAB]["rows"]
     alerts_rows = source_tabs[ALERTS_TAB]["rows"]
     active_tasks_rows = source_tabs[ACTIVE_TASKS_TAB]["rows"]
     fsn_history_rows = source_tabs[FSN_HISTORY_TAB]["rows"]
@@ -1125,21 +1182,40 @@ def create_flipkart_ads_planner_foundation() -> Dict[str, Any]:
         "Fill COGS First",
         "Do Not Run Ads",
         "Do Not Run Ads / Improve Economics",
+        "Do Not Run Ads / Improve Product First",
         "Fix Product First",
         "Fix Product/Listing First",
+        "Test Ads Carefully / Fix Product First",
+        "Test Ads Carefully / Check Logistics",
+        "Review Return Split",
         "Fix Listing First",
         "Resolve Critical Alert First",
         "Seasonal Ads Later / Prepare Listing First",
         "Test Ads",
         "Always-On Test",
         "Seasonal/Event Test",
+        "Continue / Optimize Ads",
+        "Scale Ads",
         "Manual Review",
         "Monitor",
     ])
     cogs_available_count, cogs_missing_count = count_cogs_rows(hydrated_analysis_rows)
     blank_fsn_count, duplicate_fsn_count = count_fsn_issues(ads_planner_rows)
     ready_for_test_ads_count = sum(1 for row in ads_planner_rows if normalize_text(row.get("Ads_Readiness_Status", "")) == "Ready" and normalize_text(row.get("Suggested_Ad_Action", "")) in {"Test Ads", "Always-On Test", "Seasonal/Event Test"})
-    do_not_run_ads_count = sum(1 for row in ads_planner_rows if normalize_text(row.get("Suggested_Budget_Level", "")) == "Do Not Run" or normalize_text(row.get("Suggested_Ad_Action", "")).startswith("Do Not Run Ads") or normalize_text(row.get("Suggested_Ad_Action", "")) in {"Fix Product First", "Fix Product/Listing First", "Fix Listing First", "Resolve Critical Alert First"})
+    do_not_run_ads_count = sum(
+        1
+        for row in ads_planner_rows
+        if normalize_text(row.get("Suggested_Budget_Level", "")) == "Do Not Run"
+        or normalize_text(row.get("Suggested_Ad_Action", "")).startswith("Do Not Run Ads")
+        or normalize_text(row.get("Suggested_Ad_Action", "")) in {
+            "Fix Product First",
+            "Fix Product/Listing First",
+            "Fix Listing First",
+            "Resolve Critical Alert First",
+            "Do Not Run Ads / Improve Product First",
+            "Review Return Split",
+        }
+    )
     manual_review_count = sum(1 for row in ads_planner_rows if normalize_text(row.get("Suggested_Ad_Action", "")) == "Manual Review" or normalize_text(row.get("Ads_Readiness_Status", "")) == "Review")
 
     log_row = {
@@ -1207,6 +1283,7 @@ def create_flipkart_ads_planner_foundation() -> Dict[str, Any]:
             SKU_ANALYSIS_TAB: len(analysis_rows),
             COST_MASTER_TAB: len(cost_rows),
             RETURN_ISSUE_SUMMARY_TAB: len(return_summary_rows),
+            RETURN_TYPE_PIVOT_TAB: len(source_tabs[RETURN_TYPE_PIVOT_TAB]["rows"]),
             ALERTS_TAB: len(alerts_rows),
             ACTIVE_TASKS_TAB: len(active_tasks_rows),
             FSN_HISTORY_TAB: len(fsn_history_rows),

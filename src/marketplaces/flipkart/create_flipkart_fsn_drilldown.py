@@ -33,6 +33,8 @@ ACTIVE_TASKS_TAB = "FLIPKART_ACTIVE_TASKS"
 FSN_HISTORY_TAB = "FLIPKART_FSN_HISTORY"
 RETURN_COMMENTS_TAB = "FLIPKART_RETURN_COMMENTS"
 RETURN_ISSUE_SUMMARY_TAB = "FLIPKART_RETURN_ISSUE_SUMMARY"
+CUSTOMER_RETURN_SUMMARY_TAB = "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY"
+COURIER_RETURN_SUMMARY_TAB = "FLIPKART_COURIER_RETURN_SUMMARY"
 RETURN_REASON_PIVOT_TAB = "FLIPKART_RETURN_REASON_PIVOT"
 
 DRILLDOWN_TAB = "FLIPKART_FSN_DRILLDOWN"
@@ -74,7 +76,7 @@ BUSINESS_FIELDS = [
     ("Courier_Return_Rate", "Q"),
     ("Total_Return_Count", "R"),
     ("Total_Return_Rate", "S"),
-    ("Net_Settlement", "Q"),
+    ("Net_Settlement", "T"),
     ("Flipkart_Net_Earnings", "AD"),
     ("Net_Profit_Before_COGS", "AP"),
     ("Profit_Per_Order_Before_COGS", "AQ"),
@@ -125,8 +127,8 @@ HISTORY_HEADERS = [
     "Report_Start_Date",
     "Report_End_Date",
     "Orders",
-    "Returns",
-    "Return_Rate",
+    "Total_Return_Count",
+    "Total_Return_Rate",
     "Customer_Return_Count",
     "Courier_Return_Count",
     "Unknown_Return_Count",
@@ -495,10 +497,14 @@ def build_recent_return_comments_formula(detail_columns: Dict[str, str]) -> str:
 def build_visible_grid(
     analysis_headers: Sequence[str],
     return_summary_headers: Sequence[str],
+    customer_summary_headers: Sequence[str],
+    courier_summary_headers: Sequence[str],
     return_comment_headers: Sequence[str],
 ) -> List[List[Any]]:
     analysis_columns = header_letter_map(analysis_headers)
     return_summary_columns = header_letter_map(return_summary_headers)
+    customer_summary_columns = header_letter_map(customer_summary_headers)
+    courier_summary_columns = header_letter_map(courier_summary_headers)
     return_comment_columns = header_letter_map(return_comment_headers)
 
     def analysis_lookup(header_name: str) -> str:
@@ -512,6 +518,18 @@ def build_visible_grid(
         if not column_letter:
             return '=""'
         return lookup_formula(RETURN_ISSUE_SUMMARY_TAB, column_letter)
+
+    def customer_summary_lookup(header_name: str) -> str:
+        column_letter = customer_summary_columns.get(header_name, "")
+        if not column_letter:
+            return '=""'
+        return lookup_formula(CUSTOMER_RETURN_SUMMARY_TAB, column_letter)
+
+    def courier_summary_lookup(header_name: str) -> str:
+        column_letter = courier_summary_columns.get(header_name, "")
+        if not column_letter:
+            return '=""'
+        return lookup_formula(COURIER_RETURN_SUMMARY_TAB, column_letter)
 
     rows = 125
     cols = VISIBLE_HEADERS
@@ -545,26 +563,25 @@ def build_visible_grid(
         5: ("Orders", analysis_lookup("Orders")),
         6: ("Units_Sold", analysis_lookup("Units_Sold")),
         7: ("Gross_Sales", analysis_lookup("Gross_Sales")),
-        8: ("Customer_Return_Count", analysis_lookup("Customer_Return_Count")),
-        9: ("Customer_Return_Rate", analysis_lookup("Customer_Return_Rate")),
-        10: ("Courier_Return_Count", analysis_lookup("Courier_Return_Count")),
-        11: ("Courier_Return_Rate", analysis_lookup("Courier_Return_Rate")),
-        12: ("Total_Return_Count", analysis_lookup("Total_Return_Count")),
-        13: ("Total_Return_Rate", analysis_lookup("Total_Return_Rate")),
-        14: ("Returns", analysis_lookup("Returns")),
-        15: ("Return_Rate", analysis_lookup("Return_Rate")),
-        16: ("Net_Settlement", analysis_lookup("Net_Settlement")),
-        17: ("Flipkart_Net_Earnings", analysis_lookup("Flipkart_Net_Earnings")),
-        18: ("Net_Profit_Before_COGS", analysis_lookup("Net_Profit_Before_COGS")),
-        19: ("Profit_Per_Order_Before_COGS", analysis_lookup("Profit_Per_Order_Before_COGS")),
-        20: ("Profit_Margin_Before_COGS", analysis_lookup("Profit_Margin_Before_COGS")),
-        21: ("Cost_Price", analysis_lookup("Cost_Price")),
-        22: ("Total_Unit_COGS", analysis_lookup("Total_Unit_COGS")),
-        23: ("Total_COGS", analysis_lookup("Total_COGS")),
-        24: ("Final_Net_Profit", analysis_lookup("Final_Net_Profit")),
-        25: ("Final_Profit_Per_Order", analysis_lookup("Final_Profit_Per_Order")),
-        26: ("Final_Profit_Margin", analysis_lookup("Final_Profit_Margin")),
-        27: ("COGS_Status", analysis_lookup("COGS_Status")),
+        8: ("Customer_Return_Count", customer_summary_lookup("Customer_Return_Count")),
+        9: ("Customer_Return_Rate", customer_summary_lookup("Customer_Return_Rate")),
+        10: ("Courier_Return_Count", courier_summary_lookup("Courier_Return_Count")),
+        11: ("Courier_Return_Rate", courier_summary_lookup("Courier_Return_Rate")),
+        12: ("Total_Return_Count", return_summary_lookup("Total_Return_Count")),
+        13: ("Total_Return_Rate", return_summary_lookup("Total_Return_Rate")),
+        14: ("Total_Returns_In_Detailed_Report", return_summary_lookup("Total_Returns_In_Detailed_Report")),
+        15: ("Net_Settlement", analysis_lookup("Net_Settlement")),
+        16: ("Flipkart_Net_Earnings", analysis_lookup("Flipkart_Net_Earnings")),
+        17: ("Net_Profit_Before_COGS", analysis_lookup("Net_Profit_Before_COGS")),
+        18: ("Profit_Per_Order_Before_COGS", analysis_lookup("Profit_Per_Order_Before_COGS")),
+        19: ("Profit_Margin_Before_COGS", analysis_lookup("Profit_Margin_Before_COGS")),
+        20: ("Cost_Price", analysis_lookup("Cost_Price")),
+        21: ("Total_Unit_COGS", analysis_lookup("Total_Unit_COGS")),
+        22: ("Total_COGS", analysis_lookup("Total_COGS")),
+        23: ("Final_Net_Profit", analysis_lookup("Final_Net_Profit")),
+        24: ("Final_Profit_Per_Order", analysis_lookup("Final_Profit_Per_Order")),
+        25: ("Final_Profit_Margin", analysis_lookup("Final_Profit_Margin")),
+        26: ("COGS_Status", analysis_lookup("COGS_Status")),
     }
     for row_index, (label, formula) in business_rows.items():
         set_cell(row_index, 4, label)
@@ -739,12 +756,16 @@ def create_flipkart_fsn_drilldown() -> Dict[str, Any]:
         FSN_HISTORY_TAB,
         RETURN_COMMENTS_TAB,
         RETURN_ISSUE_SUMMARY_TAB,
+        CUSTOMER_RETURN_SUMMARY_TAB,
+        COURIER_RETURN_SUMMARY_TAB,
         RETURN_REASON_PIVOT_TAB,
     ]:
         ensure_required_tab_exists(sheets_service, spreadsheet_id, tab_name)
 
     analysis_headers, analysis_rows = read_table(sheets_service, spreadsheet_id, SKU_ANALYSIS_TAB)
     return_summary_headers, return_summary_rows = read_table(sheets_service, spreadsheet_id, RETURN_ISSUE_SUMMARY_TAB)
+    customer_summary_headers, _ = read_table(sheets_service, spreadsheet_id, CUSTOMER_RETURN_SUMMARY_TAB)
+    courier_summary_headers, _ = read_table(sheets_service, spreadsheet_id, COURIER_RETURN_SUMMARY_TAB)
     return_comment_headers, return_comment_rows = read_table(sheets_service, spreadsheet_id, RETURN_COMMENTS_TAB)
     if not analysis_rows:
         raise RuntimeError(f"No rows found in {SKU_ANALYSIS_TAB}")
@@ -759,7 +780,7 @@ def create_flipkart_fsn_drilldown() -> Dict[str, Any]:
     default_selected_fsn = unique_fsns_list[0]
 
     return_rows = build_return_helper_rows()
-    visible_grid = build_visible_grid(analysis_headers, return_summary_headers, return_comment_headers)
+    visible_grid = build_visible_grid(analysis_headers, return_summary_headers, customer_summary_headers, courier_summary_headers, return_comment_headers)
     sheet_id = ensure_tab(sheets_service, spreadsheet_id, DRILLDOWN_TAB)
     update_drilldown_tab(
         sheets_service,

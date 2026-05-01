@@ -37,7 +37,7 @@ Phase 27 - Streamlit UX Cleanup + Order Item Explorer
 - `run_flipkart_post_analysis_refresh.py` now runs the order-item explorer before Looker source rebuilds in quick/full refresh paths
 - Looker source and verification layers now include the new order-item explorer tab
 - Latest order-item explorer verification: `status=PASS`, `order_item_rows=3017`, `looker_rows=3017`, `order_id_present_count=2934`, `order_item_id_present_count=2934`, `duplicate_order_item_id_count=0`, `blank_fsn_count=0`
-- Latest quick refresh result: `status=SUCCESS_WITH_WARNINGS`, `verification_passed=true`, `steps_run=update_product_type_demand_profile -> create_flipkart_competitor_price_intelligence -> create_flipkart_order_item_explorer -> create_looker_studio_sources -> verify_flipkart_integration_layer -> verify_flipkart_system_health`
+- Latest quick refresh result: `status=SUCCESS_WITH_WARNINGS`, `failed_step=null`, `verification_passed=true`, `external_google_ads_called=false`, `external_visual_search_called=false`, `manual_tabs_preserved=true`
 - Latest Stage 2 verification: `critical_alerts=22`, `high_alerts=70`, `medium_alerts=104`, `low_alerts=39`
 - Latest Stage 2 verification: `duplicate_alert_id_count=0`, all current tracker statuses `Open`
 - Latest successful wrapper run: `.\run_flipkart_pipeline.ps1`
@@ -345,6 +345,12 @@ Fix Return Intelligence v2 so it correctly extracts Order_ID and Order_Item_ID, 
 - Flipkart fast refresh modes are complete and verified for team-safe use
 - Latest validated modes: `quick`, `looker-only`, `competitor-only`, `cogs-only`, `actions-only`, `health-only`, `full`
 - Latest accepted runner result: `failed_step=null`, `verification_passed=true`, `external_google_ads_called=false`, `external_visual_search_called=false`, `manual_tabs_preserved=true`
+- Latest split-return verifier result: `verify_flipkart_ads_recommendations status=PASS`, `planner_rows=123`, `blank_final_decision_count=0`, `split_logic_warnings=0`
+- Latest split-return target FSN: `FSN=OTLGPN7CVFCTRBQF`, `Customer_Return_Rate=0.0788`, `Courier_Return_Rate=0.2614`, `Total_Return_Rate=0.4398`, `Final_Ads_Decision=Test Ads Carefully / Check Logistics`, `Ads_Decision_Reason=Customer return rate acceptable; courier return risk elevated`, `Listing_Readiness=Good`
+- Latest system-health confirmation: `status=PASS_WITH_WARNINGS`, `customer_return_rate_source_is_customer_only=true`, `courier_return_rate_source_is_courier_only=true`, `looker_fsn_metrics_has_return_fields=true`, `looker_returns_has_return_fields=true`, `looker_ads_has_return_fields=true`, `target_fsn_customer_return_rate_ok=true`, `target_fsn_courier_return_rate_ok=true`, `target_fsn_total_return_rate_ok=true`, `target_fsn_not_product_blocked_by_total_rate=true`
+- Split-return downstream leakage fix is validated: `Customer_Return_Rate` drives product/QC risk, `Courier_Return_Rate` drives logistics/RTO risk, and `Total_Return_Rate` is informational/operational pressure only
+- Split-return warning cleanup outcome: `OTLHA22RSA6PGNPF`, `OTLHGA7N9RFAF3SM`, `OTLHGABUCU2FZR6G`, and `OTLHYE2AGFBES2TT` were valid split-tab rows and no longer trigger false mirror warnings
+- Repo safety result: `status=PASS`, `safe_to_commit=true`
 - Default team-safe refresh command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode quick`
 - Team-safe looker-only command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode looker-only`
 - Team-safe health-only command is now `python -m src.marketplaces.flipkart.run_flipkart_post_analysis_refresh --mode health-only`

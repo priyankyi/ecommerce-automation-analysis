@@ -12,7 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.auth_google import build_services
-from src.marketplaces.flipkart.flipkart_utils import normalize_text, parse_float
+from src.marketplaces.flipkart.flipkart_utils import clean_fsn, normalize_text, parse_float
 
 SPREADSHEET_META_PATH = PROJECT_ROOT / "data" / "output" / "master_sku_sheet.json"
 
@@ -57,6 +57,7 @@ TABS_TO_CHECK = [
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
     "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
     "LOOKER_FLIPKART_FSN_METRICS",
+    "LOOKER_FLIPKART_ADS",
     "LOOKER_FLIPKART_RETURNS",
     "LOOKER_FLIPKART_RETURN_TYPE_PIVOT",
     "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
@@ -227,6 +228,7 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     competitor_price_rows = tables["FLIPKART_COMPETITOR_PRICE_INTELLIGENCE"][1]
     looker_fsn_metrics_rows = tables["LOOKER_FLIPKART_FSN_METRICS"][1]
     looker_returns_rows = tables["LOOKER_FLIPKART_RETURNS"][1]
+    looker_ads_rows = tables["LOOKER_FLIPKART_ADS"][1]
     looker_return_type_pivot_rows = tables["LOOKER_FLIPKART_RETURN_TYPE_PIVOT"][1]
     looker_order_item_rows = tables["LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"][1]
     looker_order_item_master_rows = tables["LOOKER_FLIPKART_ORDER_ITEM_MASTER"][1]
@@ -270,6 +272,14 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
             "Total_Return_Rate",
         ]
     )
+    looker_ads_has_return_fields = bool(looker_ads_rows) and all(
+        field in looker_ads_rows[0]
+        for field in [
+            "Customer_Return_Rate",
+            "Courier_Return_Rate",
+            "Total_Return_Rate",
+        ]
+    )
     critical_customer_return_fsn_count = sum(1 for row in customer_summary_rows if normalize_text(row.get("Customer_Return_Risk_Level", "")) == "Critical")
     high_courier_return_fsn_count = sum(1 for row in courier_summary_rows if normalize_text(row.get("Courier_Return_Risk_Level", "")) == "High")
     order_item_master_blank_fsn_count = sum(1 for row in order_item_master_rows if not normalize_text(row.get("FSN", "")))
@@ -298,6 +308,8 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         warnings.append("looker fsn metrics is missing explicit return fields")
     if not looker_returns_has_return_fields:
         warnings.append("looker returns is missing explicit return fields")
+    if not looker_ads_has_return_fields:
+        warnings.append("looker ads is missing explicit return split fields")
     if "FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs:
         warnings.append("order item explorer source tab is missing")
     elif not order_item_rows:
@@ -360,6 +372,25 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
 
     customer_only_rows = row_count(customer_return_rows)
     courier_only_rows = row_count(courier_return_rows)
+    target_fsn = "OTLGPN7CVFCTRBQF"
+    target_planner_row = next((row for row in ads_planner_rows if clean_fsn(row.get("FSN", "")) == target_fsn), {})
+    target_customer_return_rate = parse_float(target_planner_row.get("Customer_Return_Rate", ""))
+    target_courier_return_rate = parse_float(target_planner_row.get("Courier_Return_Rate", ""))
+    target_total_return_rate = parse_float(target_planner_row.get("Total_Return_Rate", ""))
+    target_final_decision = normalize_text(target_planner_row.get("Final_Ads_Decision", ""))
+    target_reason = normalize_text(target_planner_row.get("Ads_Decision_Reason", ""))
+    target_listing_readiness = normalize_text(target_planner_row.get("Listing_Readiness", ""))
+    generic_split_reason_count = sum(
+        1
+        for row in ads_planner_rows
+        if normalize_text(row.get("Customer_Return_Rate", "")) and normalize_text(row.get("Courier_Return_Rate", "")) and normalize_text(row.get("Ads_Decision_Reason", "")).lower().startswith("return rate")
+    )
+    if generic_split_reason_count > 0:
+        warnings.append("ads planner still contains generic return-rate reasons")
+    if target_listing_readiness != "Bad" and target_final_decision in {"Fix Product First", "Fix Product/Listing First"} and not (
+        "customer return rate" in target_reason.lower() or "courier return risk" in target_reason.lower()
+    ):
+        warnings.append("target fsn still uses a product-blocking decision without split-specific wording")
 
     checks = {
         "all_required_tabs_present": not [tab_name for tab_name in missing_tabs if tab_name not in {"FLIPKART_ORDER_ITEM_EXPLORER", "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"}],
@@ -409,6 +440,11 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         "courier_return_rate_source_is_courier_only": courier_only_rows == row_counts["FLIPKART_COURIER_RETURN_COMMENTS"],
         "looker_fsn_metrics_has_return_fields": looker_fsn_metrics_has_return_fields,
         "looker_returns_has_return_fields": looker_returns_has_return_fields,
+        "looker_ads_has_return_fields": looker_ads_has_return_fields,
+        "target_fsn_customer_return_rate_ok": abs(target_customer_return_rate - 0.0788) < 0.001,
+        "target_fsn_courier_return_rate_ok": abs(target_courier_return_rate - 0.2614) < 0.001,
+        "target_fsn_total_return_rate_ok": bool(normalize_text(target_planner_row.get("Total_Return_Rate", ""))),
+        "target_fsn_not_product_blocked_by_total_rate": target_final_decision not in {"Fix Product First", "Fix Product/Listing First"} and "customer return rate acceptable; courier return risk elevated" in target_reason.lower(),
     }
 
     required_missing_tabs = [

@@ -486,7 +486,6 @@ def build_alerts(
 
         orders = parse_float(row.get("Orders", ""))
         stock = parse_float(row.get("Stock", ""))
-        return_rate = parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", "")))
         net_profit_before_cogs = parse_float(row.get("Net_Profit_Before_COGS", ""))
         final_net_profit_raw = normalize_text(row.get("Final_Net_Profit", ""))
         final_profit_margin_raw = normalize_text(row.get("Final_Profit_Margin", ""))

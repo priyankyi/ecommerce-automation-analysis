@@ -394,8 +394,20 @@ def latest_row_by_run_id(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     return max(rows, key=sort_key)
 
 
-def count_return_rate(rows: Sequence[Dict[str, Any]], threshold: float = 0.20) -> int:
-    return sum(1 for row in rows if parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", ""))) > threshold)
+def count_customer_return_rate(rows: Sequence[Dict[str, Any]], threshold: float = 0.20) -> int:
+    return sum(1 for row in rows if parse_float(row.get("Customer_Return_Rate", "")) > threshold)
+
+
+def count_courier_return_rate(rows: Sequence[Dict[str, Any]], threshold: float = 0.20) -> int:
+    return sum(1 for row in rows if parse_float(row.get("Courier_Return_Rate", "")) > threshold)
+
+
+def count_return_split_missing(rows: Sequence[Dict[str, Any]]) -> int:
+    return sum(
+        1
+        for row in rows
+        if not normalize_text(row.get("Customer_Return_Rate", "")) or not normalize_text(row.get("Courier_Return_Rate", ""))
+    )
 
 
 def count_by_status(rows: Sequence[Dict[str, Any]], status_field: str = "Status") -> Counter:
@@ -564,7 +576,9 @@ def build_dashboard_rows(
         (
             SECTION_TITLES[4],
             [
-                ("High Customer Return Rate Count", count_return_rate(data_source_rows), "Business Risk Summary"),
+                ("High Customer Return Rate Count", count_customer_return_rate(data_source_rows), "Business Risk Summary"),
+                ("High Courier Return Rate Count", count_courier_return_rate(data_source_rows), "Business Risk Summary"),
+                ("Return Split Missing Count", count_return_split_missing(data_source_rows), "Business Risk Summary"),
                 ("Missing Settlement Count", sum(1 for row in data_source_rows if "Settlement Missing" in normalize_text(row.get("Missing_Data", ""))), "Business Risk Summary"),
                 ("Missing PNL Count", sum(1 for row in data_source_rows if "PNL Missing" in normalize_text(row.get("Missing_Data", ""))), "Business Risk Summary"),
                 ("Final Negative Profit FSNs", final_negative_profit_count, "Business Risk Summary"),
@@ -633,6 +647,9 @@ def build_dashboard_rows(
         "average_final_profit_margin": avg_final_profit_margin,
         "cogs_completion_percent": cogs_completion_percent,
         "fsns_with_return_issue_summary": fsns_with_return_issue_summary,
+        "high_customer_return_rate_fsns": count_customer_return_rate(data_source_rows),
+        "high_courier_return_rate_fsns": count_courier_return_rate(data_source_rows),
+        "return_split_missing_fsns": count_return_split_missing(data_source_rows),
         "critical_return_issue_fsns": critical_return_issue_fsns,
         "product_issue_fsns": product_issue_fsns,
         "logistics_issue_fsns": logistics_issue_fsns,

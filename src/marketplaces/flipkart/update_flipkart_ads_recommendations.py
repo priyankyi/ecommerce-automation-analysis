@@ -52,6 +52,7 @@ SKU_ANALYSIS_TAB = "FLIPKART_SKU_ANALYSIS"
 RETURN_ISSUE_SUMMARY_TAB = "FLIPKART_RETURN_ISSUE_SUMMARY"
 CUSTOMER_RETURN_SUMMARY_TAB = "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY"
 COURIER_RETURN_SUMMARY_TAB = "FLIPKART_COURIER_RETURN_SUMMARY"
+RETURN_TYPE_PIVOT_TAB = "FLIPKART_RETURN_TYPE_PIVOT"
 ACTIVE_TASKS_TAB = "FLIPKART_ACTIVE_TASKS"
 PRODUCT_AD_PROFILE_TAB = "FLIPKART_PRODUCT_AD_PROFILE"
 DEMAND_PROFILE_TAB = "PRODUCT_TYPE_DEMAND_PROFILE"
@@ -225,6 +226,7 @@ BLOCKED_DECISIONS = {
     "Test Ads Carefully / Check Logistics",
     "Resolve Critical Alert First",
     "Fix Ads Mapping",
+    "Review Return Split",
 }
 
 
@@ -395,15 +397,23 @@ def resolve_readiness(
         else:
             profit_readiness = "Moderate"
 
-    return_rate = safe_float(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")))
+    customer_return_rate = safe_float(planner_row.get("Customer_Return_Rate", ""))
+    total_return_rate = safe_float(planner_row.get("Total_Return_Rate", ""))
+    split_available = bool(
+        normalize_text(planner_row.get("Customer_Return_Rate", ""))
+        or normalize_text(planner_row.get("Courier_Return_Rate", ""))
+    )
     return_readiness = pick_first_nonblank(planner_row.get("Return_Readiness", ""), "")
     if not return_readiness:
-        if return_rate >= 0.50:
-            return_readiness = "Critical"
-        elif return_rate >= 0.20:
-            return_readiness = "Bad"
-        elif return_rate < 0.15:
-            return_readiness = "Good"
+        if split_available:
+            if customer_return_rate >= 0.50:
+                return_readiness = "Critical"
+            elif customer_return_rate >= 0.20:
+                return_readiness = "Bad"
+            elif customer_return_rate < 0.15:
+                return_readiness = "Good"
+            else:
+                return_readiness = "Review"
         else:
             return_readiness = "Review"
 
@@ -436,8 +446,8 @@ def resolve_readiness(
         "Alert_Readiness": alert_readiness,
         "Final_Net_Profit": format_decimal(analysis_row.get("Final_Net_Profit", ""), 2) if normalize_text(analysis_row.get("Final_Net_Profit", "")) else "",
         "Final_Profit_Margin": format_decimal(analysis_row.get("Final_Profit_Margin", ""), 4) if normalize_text(analysis_row.get("Final_Profit_Margin", "")) else "",
-        "Return_Rate": format_decimal(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")), 4) if normalize_text(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", ""))) else "",
-        "Customer_Return_Rate": format_decimal(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")), 4) if normalize_text(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", ""))) else "",
+        "Return_Rate": format_decimal(planner_row.get("Customer_Return_Rate", ""), 4) if normalize_text(planner_row.get("Customer_Return_Rate", "")) else "",
+        "Customer_Return_Rate": format_decimal(planner_row.get("Customer_Return_Rate", ""), 4) if normalize_text(planner_row.get("Customer_Return_Rate", "")) else "",
     }
 
 
@@ -554,15 +564,20 @@ def build_reason(
     if final_decision in {"Do Not Run Ads / Improve Economics", "Improve Economics Before Ads"}:
         return "Final profit margin is below 10%"
     if final_decision == "Fix Product First":
-        return f"Return rate is critical{'; return summary confirms critical issues' if normalize_text(return_row.get('Return_Action_Priority', '')) == 'Critical' else ''}"
+        return "Customer return rate is critical"
     if final_decision == "Fix Product/Listing First":
-        return f"Return rate is elevated{'; return summary shows elevated return pressure' if normalize_text(return_row.get('Return_Action_Priority', '')) in {'Critical', 'High'} else ''}"
+        listing_status = normalize_text(analysis_row.get("Listing_Status", ""))
+        if any(token in listing_status.lower() for token in ("missing", "inactive", "blocked", "not active", "unlisted", "paused")):
+            return "Listing is missing or not active"
+        return "Customer return rate is elevated"
     if final_decision == "Do Not Run Ads / Improve Product First":
-        return f"Customer return rate is critical ({normalize_text(return_row.get('Customer_Return_Rate', '')) or 'n/a'}) and margin is weak"
+        return "Customer return rate is critical and margin is weak"
     if final_decision == "Test Ads Carefully / Fix Product First":
-        return f"Customer return risk remains elevated ({normalize_text(return_row.get('Customer_Return_Risk_Level', '')) or 'n/a'})"
+        return "Customer return rate is elevated"
     if final_decision == "Test Ads Carefully / Check Logistics":
-        return f"Courier return risk is elevated ({normalize_text(courier_row.get('Courier_Return_Risk_Level', '')) or 'n/a'}); check logistics before scaling"
+        return "Customer return rate acceptable; courier return risk elevated"
+    if final_decision == "Review Return Split":
+        return "Return split missing; review manually"
     if final_decision == "Resolve Critical Alert First":
         return "Critical active alert exists"
     if final_decision == "Fix Ads Mapping":
@@ -607,28 +622,38 @@ def choose_decision(
     else:
         readiness = resolve_readiness(planner_row, analysis_row, active_task_row)
         customer_return_rate = safe_float(return_row.get("Customer_Return_Rate", ""))
-        customer_return_risk = normalize_text(return_row.get("Customer_Return_Risk_Level", ""))
         courier_return_rate = safe_float(courier_row.get("Courier_Return_Rate", ""))
-        courier_return_risk = normalize_text(courier_row.get("Courier_Return_Risk_Level", ""))
+        split_available = bool(
+            normalize_text(return_row.get("Customer_Return_Rate", ""))
+            or normalize_text(courier_row.get("Courier_Return_Rate", ""))
+        )
         profit_margin = safe_float(analysis_row.get("Final_Profit_Margin", ""))
         if has_cogs_missing(readiness):
             final_decision = "Fill COGS First"
         elif has_negative_profit(analysis_row):
             final_decision = "Do Not Run Ads"
-        elif customer_return_risk in {"Critical", "High"} and customer_return_rate >= 0.20 and profit_margin < 0.10:
+        elif split_available and customer_return_rate >= 0.20 and profit_margin < 0.10:
             final_decision = "Do Not Run Ads / Improve Product First"
-        elif customer_return_risk in {"Critical", "High"} and customer_return_rate >= 0.20 and profit_margin < 0.20:
+        elif split_available and customer_return_rate >= 0.50:
+            final_decision = "Fix Product First"
+        elif split_available and customer_return_rate >= 0.20 and profit_margin < 0.20:
             final_decision = "Test Ads Carefully / Fix Product First"
-        elif customer_return_risk in {"Critical", "High"} and customer_return_rate >= 0.20:
-            final_decision = "Fix Product/Listing First"
-        elif profit_margin < 0.10:
-            final_decision = "Improve Economics Before Ads"
+        elif split_available and customer_return_rate >= 0.20:
+            final_decision = "Test Ads Carefully / Fix Product First"
+        elif not split_available:
+            final_decision = "Review Return Split"
         elif normalize_text(active_task_row.get("Severity", "")) == "Critical":
             final_decision = "Resolve Critical Alert First"
         elif normalize_text(ads_metrics["ads_mapping_status"]) == "Issue" or normalize_text(planner_row.get("Current_Ad_Status", "")) == "Ads Mapping Issue":
             final_decision = "Fix Ads Mapping"
-        elif courier_return_risk in {"Critical", "High"} and customer_return_rate < 0.20 and profit_margin >= 0.20:
+        elif any(token in normalize_text(analysis_row.get("Listing_Status", "")).lower() for token in ("missing", "inactive", "blocked", "not active", "unlisted", "paused")):
+            final_decision = "Fix Product/Listing First"
+        elif split_available and courier_return_rate >= 0.20 and customer_return_rate < 0.20:
             final_decision = "Test Ads Carefully / Check Logistics"
+        elif split_available and customer_return_rate < 0.15 and profit_margin >= 0.20 and ads_metrics["ads_data_available"] and safe_float(ads_metrics["ad_acos"]) <= 0.20 and safe_float(ads_metrics["ad_roas"]) >= 5:
+            final_decision = "Scale Ads"
+        elif split_available and customer_return_rate < 0.15 and profit_margin >= 0.20 and ads_metrics["ads_data_available"]:
+            final_decision = "Continue / Optimize Ads"
         elif ads_metrics["ads_data_available"] and safe_float(ads_metrics["ad_acos"]) <= 0.20 and safe_float(ads_metrics["ad_roas"]) >= 5 and is_healthy_margin(analysis_row):
             final_decision = "Scale Ads"
         elif ads_metrics["ads_data_available"] and safe_float(ads_metrics["ad_acos"]) <= 0.35 and safe_float(ads_metrics["ad_roas"]) >= 3:
@@ -707,6 +732,10 @@ def append_new_columns(headers: Sequence[str]) -> List[str]:
         "Ads_Decision_Reason",
         "Ads_Risk_Level",
         "Ads_Opportunity_Level",
+        "Customer_Return_Count",
+        "Courier_Return_Count",
+        "Unknown_Return_Count",
+        "Total_Return_Count",
         "Customer_Return_Rate",
         "Customer_Return_Risk_Level",
         "Courier_Return_Rate",
@@ -739,6 +768,7 @@ def build_final_rows(
     summary_rows: Sequence[Dict[str, str]],
     customer_summary_rows: Sequence[Dict[str, str]],
     courier_summary_rows: Sequence[Dict[str, str]],
+    return_type_rows: Sequence[Dict[str, str]],
     issue_rows: Sequence[Dict[str, str]],
     active_task_rows: Sequence[Dict[str, str]],
     product_profile_rows: Sequence[Dict[str, str]],
@@ -748,6 +778,7 @@ def build_final_rows(
     summary_index = build_index(summary_rows)
     customer_summary_index = build_index(customer_summary_rows)
     courier_summary_index = build_index(courier_summary_rows)
+    return_type_index = build_index(return_type_rows)
     product_profile_index = build_index(product_profile_rows)
     demand_lookup = demand_profile_lookup(demand_profile_rows)
     active_task_group = build_grouped_tasks(active_task_rows)
@@ -762,6 +793,7 @@ def build_final_rows(
         summary_row = summary_index.get(fsn, {})
         customer_row = customer_summary_index.get(fsn, {})
         courier_row = courier_summary_index.get(fsn, {})
+        return_type_row = return_type_index.get(fsn, {})
         product_profile_row = product_profile_index.get(fsn, {})
         active_row = highest_severity_task(active_task_group.get(fsn, []))
         demand_row = demand_lookup.get(
@@ -818,11 +850,15 @@ def build_final_rows(
         updated["Ads_Decision_Reason"] = decision_reason
         updated["Ads_Risk_Level"] = risk
         updated["Ads_Opportunity_Level"] = opportunity
+        updated["Customer_Return_Count"] = normalize_text(pick_first_nonblank(customer_row.get("Customer_Return_Count", ""), analysis_row.get("Customer_Return_Count", "")))
         updated["Customer_Return_Rate"] = normalize_text(customer_row.get("Customer_Return_Rate", ""))
         updated["Customer_Return_Risk_Level"] = normalize_text(customer_row.get("Customer_Return_Risk_Level", ""))
+        updated["Courier_Return_Count"] = normalize_text(pick_first_nonblank(courier_row.get("Courier_Return_Count", ""), analysis_row.get("Courier_Return_Count", "")))
         updated["Courier_Return_Rate"] = normalize_text(courier_row.get("Courier_Return_Rate", ""))
         updated["Courier_Return_Risk_Level"] = normalize_text(courier_row.get("Courier_Return_Risk_Level", ""))
-        updated["Total_Return_Rate"] = normalize_text(return_row.get("Total_Return_Rate", return_row.get("Return_Rate", "")))
+        updated["Unknown_Return_Count"] = normalize_text(pick_first_nonblank(return_type_row.get("Unknown_Return_Count", ""), analysis_row.get("Unknown_Return_Count", "")))
+        updated["Total_Return_Count"] = normalize_text(pick_first_nonblank(return_type_row.get("Total_Return_Count", ""), analysis_row.get("Total_Return_Count", "")))
+        updated["Total_Return_Rate"] = normalize_text(pick_first_nonblank(return_type_row.get("Total_Return_Rate", ""), analysis_row.get("Total_Return_Rate", ""), analysis_row.get("Return_Rate", "")))
         updated["Next_Ad_Action_Date"] = next_action_date
         updated["Ads_Review_Date"] = review_date
         updated["Ads_Data_Used"] = ads_data_used
@@ -854,6 +890,7 @@ def update_flipkart_ads_recommendations() -> Dict[str, Any]:
     _, analysis_rows = read_sheet_table(sheets_service, spreadsheet_id, SKU_ANALYSIS_TAB)
     _, customer_return_rows = read_sheet_table(sheets_service, spreadsheet_id, CUSTOMER_RETURN_SUMMARY_TAB)
     _, courier_return_rows = read_sheet_table(sheets_service, spreadsheet_id, COURIER_RETURN_SUMMARY_TAB)
+    return_type_rows = read_sheet_table(sheets_service, spreadsheet_id, RETURN_TYPE_PIVOT_TAB)[1] if tab_exists(sheets_service, spreadsheet_id, RETURN_TYPE_PIVOT_TAB) else []
     _, active_task_rows = read_sheet_table(sheets_service, spreadsheet_id, ACTIVE_TASKS_TAB)
     _, product_profile_rows = read_sheet_table(sheets_service, spreadsheet_id, PRODUCT_AD_PROFILE_TAB)
     _, demand_profile_rows = read_sheet_table(sheets_service, spreadsheet_id, DEMAND_PROFILE_TAB)
@@ -865,6 +902,7 @@ def update_flipkart_ads_recommendations() -> Dict[str, Any]:
         summary_rows,
         customer_return_rows,
         courier_return_rows,
+        return_type_rows,
         issue_rows,
         active_task_rows,
         product_profile_rows,

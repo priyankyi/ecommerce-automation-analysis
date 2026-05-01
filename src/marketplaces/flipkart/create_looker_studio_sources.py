@@ -211,6 +211,9 @@ LOOKER_HEADERS = {
         "Ads_Risk_Level",
         "Ads_Opportunity_Level",
         "Ads_Decision_Reason",
+        "Customer_Return_Rate",
+        "Courier_Return_Rate",
+        "Total_Return_Rate",
         "Last_Updated",
     ],
     LOOKER_RETURNS_TAB: [
@@ -863,6 +866,8 @@ def build_fsn_metrics_rows(
     missing_listing_lookup: Dict[str, Dict[str, Any]],
     ads_lookup: Dict[str, Dict[str, Any]],
     return_lookup: Dict[str, Dict[str, Any]],
+    customer_return_lookup: Dict[str, Dict[str, Any]],
+    courier_return_lookup: Dict[str, Dict[str, Any]],
     latest_run_id: str,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
@@ -880,6 +885,8 @@ def build_fsn_metrics_rows(
         missing_listing_row = missing_listing_lookup.get(fsn, {})
         ads_row = ads_lookup.get(fsn, {})
         return_row = return_lookup.get(fsn, {})
+        customer_return_row = customer_return_lookup.get(fsn, {})
+        courier_return_row = courier_return_lookup.get(fsn, {})
 
         cost_price, total_unit_cogs, total_cogs, final_net_profit = resolve_cogs_fields(analysis_row)
         final_profit_margin = safe_metric_text(analysis_row, "Final_Profit_Margin")
@@ -909,13 +916,13 @@ def build_fsn_metrics_rows(
                 "Gross_Sales": safe_metric_text(analysis_row, "Gross_Sales"),
                 "Returns": safe_metric_text(analysis_row, "Returns"),
                 "Return_Rate": safe_metric_text(analysis_row, "Return_Rate"),
-                "Customer_Return_Count": safe_metric_text(analysis_row, "Customer_Return_Count"),
-                "Courier_Return_Count": safe_metric_text(analysis_row, "Courier_Return_Count"),
-                "Unknown_Return_Count": safe_metric_text(analysis_row, "Unknown_Return_Count"),
-                "Total_Return_Count": safe_metric_text(analysis_row, "Total_Return_Count"),
-                "Customer_Return_Rate": safe_metric_text(analysis_row, "Customer_Return_Rate"),
-                "Courier_Return_Rate": safe_metric_text(analysis_row, "Courier_Return_Rate"),
-                "Total_Return_Rate": safe_metric_text(analysis_row, "Total_Return_Rate"),
+                "Customer_Return_Count": safe_metric_text(customer_return_row, "Customer_Return_Count"),
+                "Courier_Return_Count": safe_metric_text(courier_return_row, "Courier_Return_Count"),
+                "Unknown_Return_Count": safe_metric_text(return_row, "Unknown_Return_Count") or safe_metric_text(analysis_row, "Unknown_Return_Count"),
+                "Total_Return_Count": safe_metric_text(return_row, "Total_Return_Count") or safe_metric_text(analysis_row, "Total_Return_Count"),
+                "Customer_Return_Rate": safe_metric_text(customer_return_row, "Customer_Return_Rate"),
+                "Courier_Return_Rate": safe_metric_text(courier_return_row, "Courier_Return_Rate"),
+                "Total_Return_Rate": safe_metric_text(return_row, "Total_Return_Rate") or safe_metric_text(analysis_row, "Total_Return_Rate"),
                 "Net_Settlement": safe_metric_text(analysis_row, "Net_Settlement"),
                 "Flipkart_Net_Earnings": safe_metric_text(analysis_row, "Flipkart_Net_Earnings"),
                 "Net_Profit_Before_COGS": safe_metric_text(analysis_row, "Net_Profit_Before_COGS"),
@@ -1053,6 +1060,9 @@ def build_ads_rows(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "Ads_Risk_Level": safe_metric_text(row, "Ads_Risk_Level"),
                 "Ads_Opportunity_Level": safe_metric_text(row, "Ads_Opportunity_Level"),
                 "Ads_Decision_Reason": safe_metric_text(row, "Ads_Decision_Reason", "Reason"),
+                "Customer_Return_Rate": safe_metric_text(row, "Customer_Return_Rate"),
+                "Courier_Return_Rate": safe_metric_text(row, "Courier_Return_Rate"),
+                "Total_Return_Rate": safe_metric_text(row, "Total_Return_Rate"),
                 "Last_Updated": safe_metric_text(row, "Last_Updated") or now_iso(),
             }
         )
@@ -1384,7 +1394,9 @@ def create_looker_studio_sources() -> Dict[str, Any]:
         listing_lookup = build_index(listing_rows, key_field="FSN")
         missing_listing_lookup = build_index(missing_listing_rows, key_field="FSN")
         ads_lookup = build_index(ads_rows, key_field="FSN")
-        return_lookup = build_index(return_rows, key_field="FSN")
+        return_lookup = build_index(return_type_pivot_rows, key_field="FSN")
+        customer_return_lookup = build_index(customer_issue_rows, key_field="FSN")
+        courier_return_lookup = build_index(courier_issue_rows, key_field="FSN")
         dashboard_lookup = build_dashboard_lookup(dashboard_data_rows)
 
         analysis_fsns = [clean_fsn(row.get("FSN", "")) for row in analysis_rows if clean_fsn(row.get("FSN", ""))]
@@ -1435,6 +1447,8 @@ def create_looker_studio_sources() -> Dict[str, Any]:
             missing_listing_lookup,
             ads_lookup,
             return_lookup,
+            customer_return_lookup,
+            courier_return_lookup,
             latest_run_id,
         )
         alert_rows = build_alert_rows(alerts_rows, latest_run_id)

@@ -1047,7 +1047,7 @@ def render_ads_planner(frames: Dict[str, pd.DataFrame], search_filters: Dict[str
 
     render_page_header(
         "Ads Planner",
-        "Use the cached Google Keyword Planner layer and product demand profile without making live Ads API calls.",
+        "Use the cached Google Keyword Planner layer, with customer return rate driving product decisions and courier return rate driving logistics cautions.",
         latest_non_blank_value(ads_df, ["Run_ID"]),
     )
     if demand_status_col and count_contains(demand_filtered, demand_status_col, "pending") > 0:
@@ -1092,7 +1092,7 @@ def render_ads_planner(frames: Dict[str, pd.DataFrame], search_filters: Dict[str
     if decision_col and not ads_filtered.empty:
         st.markdown("### Ads Decision Mix")
         render_chart_from_counts(ads_filtered, decision_col, "Ads_Count")
-    ads_cols = ["FSN", "SKU_ID", "Product_Title", "Final_Product_Type", "Final_Seasonality_Tag", "Ad_Run_Type", "Current_Ad_Status", "Ad_ROAS", "Ad_ACOS", "Ad_Revenue", "Estimated_Ad_Spend", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Ads_Decision_Reason", "Last_Updated"]
+    ads_cols = ["FSN", "SKU_ID", "Product_Title", "Final_Product_Type", "Final_Seasonality_Tag", "Ad_Run_Type", "Current_Ad_Status", "Ad_ROAS", "Ad_ACOS", "Ad_Revenue", "Estimated_Ad_Spend", "Customer_Return_Rate", "Courier_Return_Rate", "Total_Return_Rate", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Ads_Decision_Reason", "Last_Updated"]
     demand_cols = ["Product_Type", "Seasonality_Tag", "Peak_Months", "Prep_Start_Days_Before_Peak", "Ads_Start_Days_Before_Peak", "Total_Avg_Monthly_Searches", "Demand_Stability", "Seasonality_Score", "Current_Month_Demand_Index", "Next_45_Days_Demand_Status", "Demand_Confidence", "Demand_Source", "Recommended_Ad_Window", "Keyword_Count", "Cache_Status_Summary", "Cache_Pending_Count", "Cache_Success_Count", "Cache_Failed_Count", "Cache_Last_Refreshed", "Remarks", "Last_Updated"]
     render_dataframe_section(
         "Ads Planner Table",
@@ -2058,9 +2058,9 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
             {"label": "Active Tasks", "value": f"{active_task_count:,}", "note": "Current task rows"},
             {"label": "Profit Rows", "value": f"{len(profit_df):,}", "note": "Adjustment-aware profit"},
             {"label": "Order Item Master Rows", "value": f"{len(order_item_master_df):,}", "note": "Master rows for this FSN"},
-            {"label": "Customer Return Count", "value": customer_return_count or "0", "note": f"Rate {customer_return_rate}"},
-            {"label": "Courier Return Count", "value": courier_return_count or "0", "note": f"Rate {courier_return_rate}"},
-            {"label": "Total Return Count", "value": total_detailed_returns or "0", "note": f"Rate {total_return_rate}"},
+            {"label": "Customer_Return_Count", "value": customer_return_count or "0", "note": f"Customer_Return_Rate {customer_return_rate}"},
+            {"label": "Courier_Return_Count", "value": courier_return_count or "0", "note": f"Courier_Return_Rate {courier_return_rate}"},
+            {"label": "Total_Return_Count", "value": total_detailed_returns or "0", "note": f"Total_Return_Rate {total_return_rate}"},
             {"label": "Listings", "value": f"{len(listings_df):,}", "note": "Listing presence rows"},
             {"label": "Competitor Risk", "value": format_text_or_dash(latest_non_blank_value(competitor_df, ["Competition_Risk_Level"])), "note": "Comparable competitor view"},
         ],
@@ -2072,7 +2072,7 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
         [
             {"label": "Identity", "value": selected_fsn, "note": title},
             {"label": "Sales", "value": orders_value or "-", "note": f"Units {units_sold or '-'} | Gross {gross_sales or '-'}"},
-            {"label": "Returns", "value": marketplace_returns or total_detailed_returns or "-", "note": f"Customer {customer_return_count or '0'} | Courier {courier_return_count or '0'}"},
+            {"label": "Total Returns", "value": marketplace_returns or total_detailed_returns or "-", "note": f"Customer {customer_return_count or '0'} | Courier {courier_return_count or '0'}"},
             {"label": "Operations", "value": f"Alerts {alert_count:,} | Tasks {active_task_count:,}", "note": f"COGS {cogs_status} | Ads {final_ads_decision}"},
         ],
         columns=2,
@@ -2105,16 +2105,15 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
         ],
     )
     render_summary_block(
-        "Returns",
+        "Return Split",
         [
-            ("Marketplace Returns", marketplace_returns or "-"),
-            ("Customer Returns", customer_return_count or "-"),
-            ("Courier Returns", courier_return_count or "-"),
-            ("Unknown Returns", unknown_return_count or "-"),
-            ("Total Detailed Returns", total_detailed_returns or "-"),
-            ("Customer Return Rate", customer_return_rate),
-            ("Courier Return Rate", courier_return_rate),
-            ("Total Detailed Return Rate", total_return_rate),
+            ("Customer_Return_Count", customer_return_count or "-"),
+            ("Courier_Return_Count", courier_return_count or "-"),
+            ("Unknown_Return_Count", unknown_return_count or "-"),
+            ("Total_Return_Count", total_detailed_returns or "-"),
+            ("Customer_Return_Rate", customer_return_rate),
+            ("Courier_Return_Rate", courier_return_rate),
+            ("Total_Return_Rate", total_return_rate),
             ("Top Issue Category", top_issue_category or "-"),
             ("Top Return Reason", top_return_reason or "-"),
             ("Suggested Return Action", suggested_return_action or "-"),
@@ -2136,10 +2135,10 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
             "FSN Metrics Raw",
             fsn_metrics_df,
             "flipkart_fsn_metrics_raw.csv",
-            preferred_columns=[column for column in ["Run_ID", "FSN", "SKU_ID", "Product_Title", "Category", "Listing_Presence_Status", "Orders", "Units_Sold", "Gross_Sales", "Returns", "Return_Rate", "Customer_Return_Count", "Courier_Return_Count", "Unknown_Return_Count", "Total_Return_Count", "Customer_Return_Rate", "Courier_Return_Rate", "Total_Return_Rate", "Net_Settlement", "Final_Net_Profit", "Final_Profit_Margin", "COGS_Status", "Final_Action", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"] if column in fsn_metrics_df.columns],
+            preferred_columns=[column for column in ["Run_ID", "FSN", "SKU_ID", "Product_Title", "Category", "Listing_Presence_Status", "Orders", "Units_Sold", "Gross_Sales", "Total_Return_Count", "Total_Return_Rate", "Customer_Return_Count", "Courier_Return_Count", "Unknown_Return_Count", "Customer_Return_Rate", "Courier_Return_Rate", "Net_Settlement", "Final_Net_Profit", "Final_Profit_Margin", "COGS_Status", "Final_Action", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"] if column in fsn_metrics_df.columns],
         )
         render_dataframe_section(
-            "Returns Raw",
+            "Return Split Raw",
             return_metrics_df,
             "flipkart_returns_raw.csv",
             preferred_columns=[column for column in ["Run_ID", "FSN", "SKU_ID", "Product_Title", "Total_Returns_In_Detailed_Report", "Customer_Return_Count", "Courier_Return_Count", "Unknown_Return_Count", "Customer_Return_Rate", "Courier_Return_Rate", "Total_Return_Rate", "Top_Issue_Category", "Top_Return_Reason", "Suggested_Return_Action", "Return_Action_Priority", "Last_Updated"] if column in return_metrics_df.columns],
