@@ -38,6 +38,24 @@ Use these pages most often:
 
 Use `Competitor Risk`, `Data Quality`, and `Raw Data Explorer / Downloads` when you need deeper diagnosis.
 
+## Returns Intelligence
+
+The return pages split product issues from logistics issues:
+
+- `Customer Returns` are for product-quality, customer-remorse, missing-item, and damage review
+- `Courier Returns` are for logistics, RTO, cancellation, ageing, and delivery review
+- `Return Type Mix` compares customer, courier, and unknown return rows
+
+Use `Return Comments Explorer` when you need to search by:
+- `Return_ID`
+- `Order_ID`
+- `Order_Item_ID`
+- `FSN`
+- `SKU_ID`
+- comment text
+
+Use `Order ID Explorer` when you need a copy-friendly table for Flipkart support checks.
+
 ## Warnings
 
 - `Keyword cache pending` means the demand profile still has pending keyword rows.
@@ -57,6 +75,8 @@ Use `Competitor Risk`, `Data Quality`, and `Raw Data Explorer / Downloads` when 
 - Do not touch other marketplaces.
 - Do not expose credentials.
 - Use `Order ID Explorer` to copy `Order_ID` and `Order_Item_ID` for manual Flipkart checks.
+- Use `Customer Returns` for product-quality review and `Courier Returns` for logistics review.
+- Do not use courier return rates alone to block ads or label a product as defective.
 - If order IDs are missing, check whether the raw order report or normalized order layer is available before editing anything.
 
 ## Data Editing
@@ -86,9 +106,16 @@ The dashboard reads these read-only source tabs:
 - `LOOKER_FLIPKART_DEMAND_PROFILE`
 - `LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE`
 - `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER`
-- `FLIPKART_RETURN_COMMENTS`
-- `FLIPKART_RETURN_ISSUE_SUMMARY`
-- `FLIPKART_RETURN_REASON_PIVOT`
+- `LOOKER_FLIPKART_RETURN_ALL_DETAILS`
+- `LOOKER_FLIPKART_CUSTOMER_RETURNS`
+- `LOOKER_FLIPKART_COURIER_RETURNS`
+- `LOOKER_FLIPKART_RETURN_TYPE_PIVOT`
+- `FLIPKART_RETURN_ALL_DETAILS`
+- `FLIPKART_CUSTOMER_RETURN_COMMENTS`
+- `FLIPKART_COURIER_RETURN_COMMENTS`
+- `FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY`
+- `FLIPKART_COURIER_RETURN_SUMMARY`
+- `FLIPKART_RETURN_TYPE_PIVOT`
 - `FLIPKART_MISSING_ACTIVE_LISTINGS`
 - `FLIPKART_FSN_RUN_COMPARISON`
 - `FLIPKART_VISUAL_COMPETITOR_RESULTS`

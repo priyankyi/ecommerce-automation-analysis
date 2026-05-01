@@ -24,6 +24,10 @@ SOURCE_TABS = [
     "LOOKER_FLIPKART_ACTIONS",
     "LOOKER_FLIPKART_ADS",
     "LOOKER_FLIPKART_RETURNS",
+    "LOOKER_FLIPKART_RETURN_ALL_DETAILS",
+    "LOOKER_FLIPKART_CUSTOMER_RETURNS",
+    "LOOKER_FLIPKART_COURIER_RETURNS",
+    "LOOKER_FLIPKART_RETURN_TYPE_PIVOT",
     "LOOKER_FLIPKART_LISTINGS",
     "LOOKER_FLIPKART_RUN_COMPARISON",
     "LOOKER_FLIPKART_ADJUSTED_PROFIT",
@@ -35,6 +39,12 @@ SOURCE_TABS = [
     "FLIPKART_RETURN_COMMENTS",
     "FLIPKART_RETURN_ISSUE_SUMMARY",
     "FLIPKART_RETURN_REASON_PIVOT",
+    "FLIPKART_RETURN_ALL_DETAILS",
+    "FLIPKART_CUSTOMER_RETURN_COMMENTS",
+    "FLIPKART_COURIER_RETURN_COMMENTS",
+    "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY",
+    "FLIPKART_COURIER_RETURN_SUMMARY",
+    "FLIPKART_RETURN_TYPE_PIVOT",
     "FLIPKART_MISSING_ACTIVE_LISTINGS",
     "FLIPKART_FSN_RUN_COMPARISON",
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
@@ -47,6 +57,12 @@ ALERTS_TAB = "LOOKER_FLIPKART_ALERTS"
 ACTIONS_TAB = "LOOKER_FLIPKART_ACTIONS"
 ADS_TAB = "LOOKER_FLIPKART_ADS"
 RETURNS_TAB = "LOOKER_FLIPKART_RETURNS"
+RETURN_ALL_DETAILS_TAB = "FLIPKART_RETURN_ALL_DETAILS"
+CUSTOMER_RETURN_COMMENTS_TAB = "FLIPKART_CUSTOMER_RETURN_COMMENTS"
+COURIER_RETURN_COMMENTS_TAB = "FLIPKART_COURIER_RETURN_COMMENTS"
+CUSTOMER_RETURN_SUMMARY_TAB = "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY"
+COURIER_RETURN_SUMMARY_TAB = "FLIPKART_COURIER_RETURN_SUMMARY"
+RETURN_TYPE_PIVOT_TAB = "FLIPKART_RETURN_TYPE_PIVOT"
 LISTINGS_TAB = "LOOKER_FLIPKART_LISTINGS"
 RUN_COMPARISON_TAB = "LOOKER_FLIPKART_RUN_COMPARISON"
 ADJUSTED_PROFIT_TAB = "LOOKER_FLIPKART_ADJUSTED_PROFIT"
@@ -159,6 +175,28 @@ RETURN_CATEGORY_PALETTE = {
     "customer refused / rto": "#e2e8f0",
     "return fraud / suspicious": "#fecaca",
     "other": "#e2e8f0",
+}
+
+CUSTOMER_RETURN_CATEGORY_PALETTE = {
+    "defective product": "#fecaca",
+    "damaged product": "#fecaca",
+    "missing item / accessory": "#fef3c7",
+    "wrong product": "#fecaca",
+    "quality issue": "#fef3c7",
+    "not as described": "#fef3c7",
+    "customer remorse": "#e2e8f0",
+    "other customer return": "#e2e8f0",
+}
+
+COURIER_RETURN_CATEGORY_PALETTE = {
+    "order cancelled": "#e2e8f0",
+    "rto / courier return": "#dbeafe",
+    "attempts exhausted": "#dbeafe",
+    "shipment ageing": "#dbeafe",
+    "not serviceable": "#dbeafe",
+    "orc validated with customer": "#dbeafe",
+    "delivery failed": "#dbeafe",
+    "other courier return": "#e2e8f0",
 }
 
 COMPARISON_PALETTE = {
@@ -1059,81 +1097,179 @@ def render_ads_planner(frames: Dict[str, pd.DataFrame], search_filters: Dict[str
 
 
 def render_returns_intelligence(frames: Dict[str, pd.DataFrame], search_filters: Dict[str, str]) -> None:
-    returns_df = dataframe_or_empty(frames[RETURNS_TAB])
-    issue_summary_df = dataframe_or_empty(frames[RETURN_ISSUE_SUMMARY_TAB])
-    reason_pivot_df = dataframe_or_empty(frames[RETURN_REASON_PIVOT_TAB])
-    returns_filtered = apply_global_search(returns_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Top_Issue_Category", "Top_Return_Reason", "Top_Return_Sub_Reason", "Suggested_Return_Action", "Return_Action_Priority"])
-    issue_filtered = apply_global_search(issue_summary_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Issue_Category", "Return_Reason", "Return_Sub_Reason", "Suggested_Action"])
-    pivot_filtered = apply_global_search(reason_pivot_df, search_filters, ["Issue_Category", "Return_Reason", "Return_Sub_Reason", "Suggested_Action"])
+    customer_detail_df = dataframe_or_empty(frames[CUSTOMER_RETURN_COMMENTS_TAB])
+    courier_detail_df = dataframe_or_empty(frames[COURIER_RETURN_COMMENTS_TAB])
+    all_details_df = dataframe_or_empty(frames[RETURN_ALL_DETAILS_TAB])
+    customer_summary_df = dataframe_or_empty(frames[CUSTOMER_RETURN_SUMMARY_TAB])
+    courier_summary_df = dataframe_or_empty(frames[COURIER_RETURN_SUMMARY_TAB])
+    pivot_df = dataframe_or_empty(frames[RETURN_TYPE_PIVOT_TAB])
+    bucket_col = resolve_column(all_details_df, ["Return_Bucket"])
+    if customer_detail_df.empty and not all_details_df.empty and bucket_col:
+        customer_detail_df = all_details_df[all_details_df[bucket_col].fillna("").astype(str).map(normalize_text) == "customer_return"].copy()
+    if courier_detail_df.empty and not all_details_df.empty and bucket_col:
+        courier_detail_df = all_details_df[all_details_df[bucket_col].fillna("").astype(str).map(normalize_text) == "courier_return"].copy()
+    all_details_filtered = apply_global_search(all_details_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Return_Reason", "Return_Sub_Reason", "Comments", "Order_ID", "Order_Item_ID", "Return_ID"])
+    customer_filtered = apply_global_search(customer_summary_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Top_Customer_Return_Reason", "Top_Customer_Return_Sub_Reason", "Suggested_Action"])
+    courier_filtered = apply_global_search(courier_summary_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Top_Courier_Return_Reason", "Top_Courier_Return_Sub_Reason", "Suggested_Action"])
+    pivot_filtered = apply_global_search(pivot_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Customer_vs_Courier_Mix", "Dominant_Return_Type"])
     render_page_header(
         "Returns Intelligence",
-        "Focus on return drivers, priority, and the most common issue patterns without touching the source reports.",
-        latest_non_blank_value(returns_df, ["Run_ID"]),
+        "Customer returns drive product-quality and ads risk. Courier returns stay separate as logistics intelligence.",
+        latest_non_blank_value(all_details_df, ["Run_ID"]),
     )
-    category_col = resolve_column(issue_filtered, ["Issue_Category", "Top_Issue_Category"])
-    action_priority_col = resolve_column(issue_filtered, ["Return_Action_Priority", "Priority"])
-    category_values = unique_text_values(issue_filtered, category_col) if category_col else []
-    priority_values = unique_text_values(issue_filtered, action_priority_col) if action_priority_col else []
-    filter_cols = st.columns(2)
-    with filter_cols[0]:
-        category_pick = st.multiselect("Issue category", category_values, default=category_values, key="returns_category_filter")
-    with filter_cols[1]:
-        priority_pick = st.multiselect("Return action priority", priority_values, default=priority_values, key="returns_priority_filter")
-    if category_col:
-        issue_filtered = filter_by_selected_values(issue_filtered, category_col, category_pick)
-    if action_priority_col:
-        issue_filtered = filter_by_selected_values(issue_filtered, action_priority_col, priority_pick)
+    customer_count = int(parse_float(latest_non_blank_value(customer_summary_df, ["Customer_Return_Count"]) or 0))
+    courier_count = int(parse_float(latest_non_blank_value(courier_summary_df, ["Courier_Return_Count"]) or 0))
+    customer_rate = latest_non_blank_value(customer_summary_df, ["Customer_Return_Rate"])
+    courier_rate = latest_non_blank_value(courier_summary_df, ["Courier_Return_Rate"])
+    total_return_count = int(parse_float((customer_count + courier_count) if (customer_count or courier_count) else latest_non_blank_value(all_details_df, ["Total_Return_Count"]) or 0))
+    critical_customer_fsns = 0
+    if not customer_summary_df.empty and "Customer_Return_Risk_Level" in customer_summary_df.columns:
+        critical_customer_fsns = int((customer_summary_df["Customer_Return_Risk_Level"].fillna("").astype(str).map(normalize_text) == "Critical").sum())
+    high_courier_fsns = 0
+    if not courier_summary_df.empty and "Courier_Return_Risk_Level" in courier_summary_df.columns:
+        high_courier_fsns = int((courier_summary_df["Courier_Return_Risk_Level"].fillna("").astype(str).map(normalize_text) == "High").sum())
+    quality_issue_count = int(customer_summary_df["Quality_Issue_Count"].map(parse_float).sum()) if "Quality_Issue_Count" in customer_summary_df.columns else 0
+    defective_count = int(customer_summary_df["Defective_Product_Count"].map(parse_float).sum()) if "Defective_Product_Count" in customer_summary_df.columns else 0
+    damaged_count = int(customer_summary_df["Damaged_Product_Count"].map(parse_float).sum()) if "Damaged_Product_Count" in customer_summary_df.columns else 0
+    missing_count = int(customer_summary_df["Missing_Item_Count"].map(parse_float).sum()) if "Missing_Item_Count" in customer_summary_df.columns else 0
+    top_customer_reason = latest_non_blank_value(customer_summary_df, ["Top_Customer_Return_Reason"])
+    top_courier_reason = latest_non_blank_value(courier_summary_df, ["Top_Courier_Return_Reason"])
 
-    critical_count = int(issue_filtered["Critical_Issue_Count"].map(parse_float).sum()) if "Critical_Issue_Count" in issue_filtered.columns else 0
-    high_count = int(issue_filtered["High_Issue_Count"].map(parse_float).sum()) if "High_Issue_Count" in issue_filtered.columns else 0
-    product_count = int(issue_filtered["Product_Issue_Count"].map(parse_float).sum()) if "Product_Issue_Count" in issue_filtered.columns else 0
-    logistics_count = int(issue_filtered["Logistics_Issue_Count"].map(parse_float).sum()) if "Logistics_Issue_Count" in issue_filtered.columns else 0
-    customer_count = int(issue_filtered["Customer_RTO_Count"].map(parse_float).sum()) if "Customer_RTO_Count" in issue_filtered.columns else 0
-    total_issue_fsns = len(build_fsn_index(issue_filtered)) if not issue_filtered.empty else len(build_fsn_index(returns_filtered))
     render_metric_cards(
         [
-            {"label": "Total Return Issue FSNs", "value": f"{total_issue_fsns:,}", "note": "FSNs with a return issue summary"},
-            {"label": "Critical Return Issue", "value": f"{critical_count:,}", "note": "Highest priority return rows"},
-            {"label": "High Return Issue", "value": f"{high_count:,}", "note": "Needs fast attention"},
-            {"label": "Product Issue", "value": f"{product_count:,}", "note": "Product quality or expectation"},
-            {"label": "Logistics Issue", "value": f"{logistics_count:,}", "note": "Courier / delivery related"},
-            {"label": "Customer / RTO", "value": f"{customer_count:,}", "note": "Customer refusal / return-to-origin"},
+            {"label": "Customer Returns", "value": f"{customer_count:,}", "note": f"Rate {customer_rate or '-'}"},
+            {"label": "Courier Returns", "value": f"{courier_count:,}", "note": f"Rate {courier_rate or '-'}"},
+            {"label": "Total Returns", "value": f"{total_return_count:,}", "note": "Customer + courier"},
+            {"label": "Critical Customer FSNs", "value": f"{critical_customer_fsns:,}", "note": "Product-quality risk"},
+            {"label": "High Courier FSNs", "value": f"{high_courier_fsns:,}", "note": "Operational/logistics risk"},
+            {"label": "Quality Issue Count", "value": f"{quality_issue_count:,}", "note": f"Defective {defective_count:,} | Damaged {damaged_count:,} | Missing {missing_count:,}"},
         ],
         columns=3,
     )
-    if category_col and not issue_filtered.empty:
-        st.markdown("### Top Issue Categories")
-        render_chart_from_counts(issue_filtered, category_col, "Issue_Count")
-    if not pivot_filtered.empty:
+
+    section_cols = st.columns(3)
+    with section_cols[0]:
+        st.markdown("### Customer Returns")
+        if not customer_summary_df.empty:
+            render_dataframe_section(
+                "Customer Return Summary",
+                customer_filtered,
+                "flipkart_customer_return_issue_summary_filtered.csv",
+                preferred_columns=[
+                    "FSN",
+                    "SKU_ID",
+                    "Product_Title",
+                    "Sold_Order_Items",
+                    "Customer_Return_Count",
+                    "Customer_Return_Rate",
+                    "Quality_Issue_Count",
+                    "Defective_Product_Count",
+                    "Damaged_Product_Count",
+                    "Missing_Item_Count",
+                    "Wrong_Product_Count",
+                    "Customer_Remorse_Count",
+                    "Top_Customer_Return_Reason",
+                    "Top_Customer_Return_Sub_Reason",
+                    "Customer_Return_Risk_Level",
+                    "Suggested_Action",
+                    "Data_Gap_Reason",
+                    "Last_Updated",
+                ],
+                style_columns={"Customer_Return_Risk_Level": RISK_PALETTE, "Suggested_Action": DECISION_PALETTE},
+            )
+    with section_cols[1]:
+        st.markdown("### Courier Returns")
+        if not courier_summary_df.empty:
+            render_dataframe_section(
+                "Courier Return Summary",
+                courier_filtered,
+                "flipkart_courier_return_summary_filtered.csv",
+                preferred_columns=[
+                    "FSN",
+                    "SKU_ID",
+                    "Product_Title",
+                    "Sold_Order_Items",
+                    "Courier_Return_Count",
+                    "Courier_Return_Rate",
+                    "Order_Cancelled_Count",
+                    "Attempts_Exhausted_Count",
+                    "Shipment_Ageing_Count",
+                    "Not_Serviceable_Count",
+                    "ORC_Validated_Count",
+                    "Delivery_Failed_Count",
+                    "Top_Courier_Return_Reason",
+                    "Top_Courier_Return_Sub_Reason",
+                    "Courier_Return_Risk_Level",
+                    "Suggested_Action",
+                    "Data_Gap_Reason",
+                    "Last_Updated",
+                ],
+                style_columns={"Courier_Return_Risk_Level": RISK_PALETTE, "Suggested_Action": DECISION_PALETTE},
+            )
+    with section_cols[2]:
+        st.markdown("### Return Type Mix")
+        if not pivot_df.empty:
+            render_dataframe_section(
+                "Return Type Pivot",
+                pivot_filtered,
+                "flipkart_return_type_pivot_filtered.csv",
+                preferred_columns=[
+                    "FSN",
+                    "SKU_ID",
+                    "Product_Title",
+                    "Sold_Order_Items",
+                    "Customer_Return_Count",
+                    "Courier_Return_Count",
+                    "Unknown_Return_Count",
+                    "Total_Return_Count",
+                    "Customer_Return_Rate",
+                    "Courier_Return_Rate",
+                    "Total_Return_Rate",
+                    "Customer_vs_Courier_Mix",
+                    "Dominant_Return_Type",
+                    "Last_Updated",
+                ],
+                style_columns={"Customer_vs_Courier_Mix": STATUS_PALETTE, "Dominant_Return_Type": STATUS_PALETTE},
+            )
+
+    if not all_details_filtered.empty:
+        st.markdown("### Return Detail Copy View")
         render_dataframe_section(
-            "Return Reason Pivot",
-            pivot_filtered,
-            "flipkart_return_reason_pivot_filtered.csv",
-            preferred_columns=["Issue_Category", "Return_Reason", "Return_Sub_Reason", "Return_Count", "FSN_Count", "Top_FSNs", "Suggested_Action"],
-            style_columns={"Issue_Category": RETURN_CATEGORY_PALETTE, "Suggested_Action": DECISION_PALETTE},
-        )
-    render_dataframe_section(
-        "FSN-Level Returns Summary",
-        issue_filtered,
-        "flipkart_return_issue_summary_filtered.csv",
-        preferred_columns=["FSN", "SKU_ID", "Product_Title", "Total_Returns_In_Detailed_Report", "Top_Issue_Category", "Top_Return_Reason", "Top_Return_Sub_Reason", "Critical_Issue_Count", "High_Issue_Count", "Product_Issue_Count", "Logistics_Issue_Count", "Customer_RTO_Count", "Suggested_Return_Action", "Return_Action_Priority", "Last_Updated"],
-        style_columns={"Top_Issue_Category": RETURN_CATEGORY_PALETTE, "Return_Action_Priority": STATUS_PALETTE, "Suggested_Return_Action": DECISION_PALETTE},
-    )
-    with st.expander("Raw returns source table", expanded=False):
-        render_dataframe_section(
-            "Returns Source",
-            returns_filtered,
-            "flipkart_returns_source_filtered.csv",
-            preferred_columns=[column for column in ["FSN", "SKU_ID", "Product_Title", "Total_Returns_In_Detailed_Report", "Top_Issue_Category", "Top_Return_Reason", "Top_Return_Sub_Reason", "Suggested_Return_Action", "Return_Action_Priority", "Last_Updated"] if column in returns_filtered.columns],
-            style_columns={"Top_Issue_Category": RETURN_CATEGORY_PALETTE, "Return_Action_Priority": STATUS_PALETTE},
+            "All Return Details",
+            all_details_filtered,
+            "flipkart_return_all_details_filtered.csv",
+            preferred_columns=[
+                "Run_ID",
+                "Return_ID",
+                "Order_ID",
+                "Order_Item_ID",
+                "Return_Type",
+                "Return_Bucket",
+                "FSN",
+                "SKU_ID",
+                "Product_Title",
+                "Return_Reason",
+                "Return_Sub_Reason",
+                "Comments",
+                "Customer_Issue_Category",
+                "Courier_Issue_Category",
+                "Return_Status",
+                "Return_Result",
+                "Suggested_Action",
+                "Source_File",
+                "Last_Updated",
+            ],
+            style_columns={"Return_Type": STATUS_PALETTE, "Return_Bucket": STATUS_PALETTE},
         )
 
 
 def render_return_comments_explorer(frames: Dict[str, pd.DataFrame], search_filters: Dict[str, str]) -> None:
-    detail_df = dataframe_or_empty(frames[RETURN_COMMENTS_TAB])
+    detail_df = dataframe_or_empty(frames[RETURN_ALL_DETAILS_TAB])
+    if detail_df.empty:
+        detail_df = dataframe_or_empty(frames[RETURN_COMMENTS_TAB])
     render_page_header(
         "Return Comments Explorer",
-        "Search the detailed return rows by FSN, SKU, order, return ID, and free-text return notes.",
+        "Search customer and courier return rows by FSN, SKU, order, return ID, and free-text notes.",
         latest_non_blank_value(detail_df, ["Run_ID"]),
     )
     if detail_df.empty:
@@ -1142,12 +1278,14 @@ def render_return_comments_explorer(frames: Dict[str, pd.DataFrame], search_filt
     fsn_col = resolve_column(detail_df, ["FSN"])
     sku_col = resolve_column(detail_df, ["SKU_ID"])
     order_col = resolve_column(detail_df, ["Order_ID", "Order Item ID", "Order_Item_ID"])
+    order_item_col = resolve_column(detail_df, ["Order_Item_ID"])
     return_col = resolve_column(detail_df, ["Return_ID"])
-    comments_col = resolve_column(detail_df, ["Comments", "Customer_Comment", "Return_Reason"])
-    issue_col = resolve_column(detail_df, ["Issue_Category"])
+    return_type_col = resolve_column(detail_df, ["Return_Type"])
+    customer_issue_col = resolve_column(detail_df, ["Customer_Issue_Category"])
+    courier_issue_col = resolve_column(detail_df, ["Courier_Issue_Category"])
     reason_col = resolve_column(detail_df, ["Return_Reason"])
     sub_reason_col = resolve_column(detail_df, ["Return_Sub_Reason"])
-    severity_col = resolve_column(detail_df, ["Issue_Severity", "Priority", "Severity"])
+    comments_col = resolve_column(detail_df, ["Comments"])
 
     filter_cols = st.columns(4)
     with filter_cols[0]:
@@ -1155,7 +1293,7 @@ def render_return_comments_explorer(frames: Dict[str, pd.DataFrame], search_filt
     with filter_cols[1]:
         sku_search = st.text_input("SKU search", value=search_filters.get("sku", ""), key="return_comments_sku_search")
     with filter_cols[2]:
-        order_search = st.text_input("Order / Return ID search", value="", key="return_comments_order_search")
+        order_search = st.text_input("Order / Order Item ID search", value="", key="return_comments_order_search")
     with filter_cols[3]:
         comment_search = st.text_input("Comment / reason text", value=search_filters.get("product", ""), key="return_comments_text_search")
 
@@ -1165,52 +1303,68 @@ def render_return_comments_explorer(frames: Dict[str, pd.DataFrame], search_filt
     if sku_search and sku_col:
         filtered = filter_by_query(filtered, sku_search, [sku_col])
     if order_search:
-        filtered = filter_by_query(filtered, order_search, [column for column in [order_col, return_col] if column])
+        filtered = filter_by_query(filtered, order_search, [column for column in [order_col, order_item_col, return_col] if column])
     if comment_search:
         filtered = filter_by_query(filtered, comment_search, [column for column in [comments_col, reason_col, sub_reason_col] if column])
 
-    issue_values = unique_text_values(filtered, issue_col) if issue_col else []
-    reason_values = unique_text_values(filtered, reason_col) if reason_col else []
-    sub_reason_values = unique_text_values(filtered, sub_reason_col) if sub_reason_col else []
-    severity_values = unique_text_values(filtered, severity_col) if severity_col else []
-    filter_cols_2 = st.columns(4)
+    return_type_values = unique_text_values(filtered, return_type_col) if return_type_col else []
+    customer_issue_values = unique_text_values(filtered, customer_issue_col) if customer_issue_col else []
+    courier_issue_values = unique_text_values(filtered, courier_issue_col) if courier_issue_col else []
+    filter_cols_2 = st.columns(3)
     with filter_cols_2[0]:
-        issue_pick = st.multiselect("Issue category", issue_values, default=issue_values, key="return_comments_issue_filter")
+        return_type_pick = st.multiselect("Return type", return_type_values or ["customer_return", "courier_return", "unknown_return"], default=return_type_values or ["customer_return", "courier_return", "unknown_return"], key="return_comments_type_filter")
     with filter_cols_2[1]:
-        reason_pick = st.multiselect("Return reason", reason_values, default=reason_values, key="return_comments_reason_filter")
+        customer_issue_pick = st.multiselect("Customer issue category", customer_issue_values, default=customer_issue_values, key="return_comments_customer_issue_filter")
     with filter_cols_2[2]:
-        sub_reason_pick = st.multiselect("Return sub-reason", sub_reason_values, default=sub_reason_values, key="return_comments_subreason_filter")
-    with filter_cols_2[3]:
-        severity_pick = st.multiselect("Severity", severity_values, default=severity_values, key="return_comments_severity_filter")
-    if issue_col:
-        filtered = filter_by_selected_values(filtered, issue_col, issue_pick)
-    if reason_col:
-        filtered = filter_by_selected_values(filtered, reason_col, reason_pick)
-    if sub_reason_col:
-        filtered = filter_by_selected_values(filtered, sub_reason_col, sub_reason_pick)
-    if severity_col:
-        filtered = filter_by_selected_values(filtered, severity_col, severity_pick)
+        courier_issue_pick = st.multiselect("Courier issue category", courier_issue_values, default=courier_issue_values, key="return_comments_courier_issue_filter")
+    if return_type_col:
+        filtered = filter_by_selected_values(filtered, return_type_col, return_type_pick)
+    if customer_issue_col:
+        filtered = filter_by_selected_values(filtered, customer_issue_col, customer_issue_pick)
+    if courier_issue_col:
+        filtered = filter_by_selected_values(filtered, courier_issue_col, courier_issue_pick)
 
-    if comments_col:
-        comment_values = detail_df[comments_col].fillna("").astype(str).map(normalize_text)
-        blank_comments = int((comment_values == "").sum())
-        coded_comments = int(comment_values.str.fullmatch(r"[A-Z0-9 _/\-]+").fillna(False).sum())
-        if blank_comments == len(detail_df) or coded_comments >= max(1, len(detail_df) // 2):
-            st.info("Flipkart return labels may be coded; review manually.")
     render_metric_cards(
         [
             {"label": "Filtered Rows", "value": f"{len(filtered):,}", "note": "Return rows in view"},
             {"label": "Unique FSNs", "value": f"{len(build_fsn_index(filtered)):,}", "note": "Return-linked FSNs"},
-            {"label": "Detailed Rows", "value": f"{count_non_blank_rows(filtered):,}", "note": "Non-empty detailed records"},
+            {"label": "Copy-Friendly IDs", "value": f"{count_unique_non_blank(filtered, return_col) + count_unique_non_blank(filtered, order_col):,}", "note": "Return / order lookup"},
         ],
         columns=3,
     )
+    copy_order_item_ids = "\n".join(sorted({normalize_text(value) for value in filtered[order_item_col].fillna("").astype(str).tolist() if normalize_text(value)})) if order_item_col and not filtered.empty else ""
+    copy_order_ids = "\n".join(sorted({normalize_text(value) for value in filtered[order_col].fillna("").astype(str).tolist() if normalize_text(value)})) if order_col and not filtered.empty else ""
+    copy_cols = st.columns(2)
+    with copy_cols[0]:
+        st.text_area("Copy Order_Item_ID list", value=copy_order_item_ids, height=180, key="return_comments_copy_order_item_ids")
+    with copy_cols[1]:
+        st.text_area("Copy Order_ID list", value=copy_order_ids, height=180, key="return_comments_copy_order_ids")
     render_dataframe_section(
         "Return Comments Detail",
         filtered,
         "flipkart_return_comments_filtered.csv",
-        preferred_columns=[column for column in ["FSN", "SKU_ID", "Product_Title", "Order_ID", "Order_Item_ID", "Return_ID", "Return_Requested_Date", "Return_Status", "Return_Reason", "Return_Sub_Reason", "Comments", "Issue_Category", "Issue_Severity", "Suggested_Action", "Source_File", "Last_Updated"] if column in filtered.columns],
-        style_columns={"Issue_Category": RETURN_CATEGORY_PALETTE, "Issue_Severity": SEVERITY_PALETTE, "Suggested_Action": DECISION_PALETTE},
+        preferred_columns=[
+            column
+            for column in [
+                "Order_ID",
+                "Order_Item_ID",
+                "Return_ID",
+                "Return_Type",
+                "FSN",
+                "SKU_ID",
+                "Product_Title",
+                "Return_Reason",
+                "Return_Sub_Reason",
+                "Comments",
+                "Customer_Issue_Category",
+                "Courier_Issue_Category",
+                "Suggested_Action",
+                "Source_File",
+                "Last_Updated",
+            ]
+            if column in filtered.columns
+        ],
+        style_columns={"Return_Type": STATUS_PALETTE, "Customer_Issue_Category": CUSTOMER_RETURN_CATEGORY_PALETTE, "Courier_Issue_Category": COURIER_RETURN_CATEGORY_PALETTE, "Suggested_Action": DECISION_PALETTE},
     )
 
 
@@ -1218,7 +1372,7 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
     order_df, source_tab = first_available_frame(frames, [LOOKER_ORDER_ITEM_EXPLORER_TAB, ORDER_ITEM_EXPLORER_TAB])
     render_page_header(
         "Order ID Explorer",
-        "Copy-friendly order-level lookup for Order ID and Order Item ID checks. Use this page to verify manual Flipkart details without editing the source data.",
+        "Copy-friendly order-level lookup for Order ID, Order Item ID, and return checks. Use this page to verify manual Flipkart details without editing the source data.",
         latest_non_blank_value(order_df, ["Run_ID"]),
     )
     if order_df.empty:
@@ -1230,11 +1384,15 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
     fsn_col = resolve_column(order_df, ["FSN"])
     sku_col = resolve_column(order_df, ["SKU_ID", "Seller_SKU"])
     title_col = resolve_column(order_df, ["Product_Title", "Product Name", "Title"])
-    return_status_col = resolve_column(order_df, ["Return_Status"])
+    return_type_col = resolve_column(order_df, ["Return_Type"])
     return_id_col = resolve_column(order_df, ["Return_ID"])
-    return_issue_col = resolve_column(order_df, ["Return_Issue_Category", "Issue_Category"])
+    customer_issue_col = resolve_column(order_df, ["Customer_Issue_Category"])
+    courier_issue_col = resolve_column(order_df, ["Courier_Issue_Category"])
+    customer_risk_col = resolve_column(order_df, ["Customer_Return_Risk_Level"])
+    courier_risk_col = resolve_column(order_df, ["Courier_Return_Risk_Level"])
     risk_col = resolve_column(order_df, ["Competition_Risk_Level"])
     decision_col = resolve_column(order_df, ["Final_Ads_Decision"])
+    return_reason_col = resolve_column(order_df, ["Return_Reason"])
 
     st.caption(f"Source tab: `{source_tab}`")
 
@@ -1264,26 +1422,43 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
     if title_search and title_col:
         filtered = filter_by_query(filtered, title_search, [title_col])
 
-    filter_row_1 = st.columns(2)
-    return_status_values = unique_text_values(filtered, return_status_col) if return_status_col else []
-    return_issue_values = unique_text_values(filtered, return_issue_col) if return_issue_col else []
+    filter_row_1 = st.columns(3)
+    return_type_values = unique_text_values(filtered, return_type_col) if return_type_col else []
+    customer_issue_values = unique_text_values(filtered, customer_issue_col) if customer_issue_col else []
+    courier_issue_values = unique_text_values(filtered, courier_issue_col) if courier_issue_col else []
     with filter_row_1[0]:
-        return_status_pick = st.multiselect("Return status", return_status_values, default=return_status_values, key="order_item_return_status_filter")
+        return_type_pick = st.multiselect("Return type", return_type_values or ["customer_return", "courier_return", "unknown_return"], default=return_type_values or ["customer_return", "courier_return", "unknown_return"], key="order_item_return_type_filter")
     with filter_row_1[1]:
-        return_issue_pick = st.multiselect("Return issue category", return_issue_values, default=return_issue_values, key="order_item_return_issue_filter")
+        customer_issue_pick = st.multiselect("Customer issue category", customer_issue_values, default=customer_issue_values, key="order_item_customer_issue_filter")
+    with filter_row_1[2]:
+        courier_issue_pick = st.multiselect("Courier issue category", courier_issue_values, default=courier_issue_values, key="order_item_courier_issue_filter")
 
     filter_row_2 = st.columns(2)
+    customer_risk_values = unique_text_values(filtered, customer_risk_col) if customer_risk_col else []
+    courier_risk_values = unique_text_values(filtered, courier_risk_col) if courier_risk_col else []
+    with filter_row_2[0]:
+        customer_risk_pick = st.multiselect("Customer return risk", customer_risk_values, default=customer_risk_values, key="order_item_customer_risk_filter")
+    with filter_row_2[1]:
+        courier_risk_pick = st.multiselect("Courier return risk", courier_risk_values, default=courier_risk_values, key="order_item_courier_risk_filter")
+
+    filter_row_3 = st.columns(2)
     risk_values = unique_text_values(filtered, risk_col) if risk_col else []
     decision_values = unique_text_values(filtered, decision_col) if decision_col else []
-    with filter_row_2[0]:
+    with filter_row_3[0]:
         risk_pick = st.multiselect("Competition risk level", risk_values, default=risk_values, key="order_item_risk_filter")
-    with filter_row_2[1]:
+    with filter_row_3[1]:
         decision_pick = st.multiselect("Final ads decision", decision_values, default=decision_values, key="order_item_decision_filter")
 
-    if return_status_col:
-        filtered = filter_by_selected_values(filtered, return_status_col, return_status_pick)
-    if return_issue_col:
-        filtered = filter_by_selected_values(filtered, return_issue_col, return_issue_pick)
+    if return_type_col:
+        filtered = filter_by_selected_values(filtered, return_type_col, return_type_pick)
+    if customer_issue_col:
+        filtered = filter_by_selected_values(filtered, customer_issue_col, customer_issue_pick)
+    if courier_issue_col:
+        filtered = filter_by_selected_values(filtered, courier_issue_col, courier_issue_pick)
+    if customer_risk_col:
+        filtered = filter_by_selected_values(filtered, customer_risk_col, customer_risk_pick)
+    if courier_risk_col:
+        filtered = filter_by_selected_values(filtered, courier_risk_col, courier_risk_pick)
     if risk_col:
         filtered = filter_by_selected_values(filtered, risk_col, risk_pick)
     if decision_col:
@@ -1292,10 +1467,10 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
     order_id_count = count_unique_non_blank(filtered, order_id_col) if order_id_col else 0
     order_item_count = count_unique_non_blank(filtered, order_item_col) if order_item_col else 0
     returned_rows = 0
-    if not filtered.empty and (return_status_col or return_id_col):
+    if not filtered.empty and (return_type_col or return_id_col):
         status_match = pd.Series(False, index=filtered.index)
-        if return_status_col:
-            status_match = status_match | (filtered[return_status_col].fillna("").astype(str).map(normalize_text) != "")
+        if return_type_col:
+            status_match = status_match | (filtered[return_type_col].fillna("").astype(str).map(normalize_text) != "")
         if return_id_col:
             status_match = status_match | (filtered[return_id_col].fillna("").astype(str).map(normalize_text) != "")
         returned_rows = int(status_match.sum())
@@ -1306,7 +1481,7 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
             {"label": "Total Order Item Rows", "value": f"{len(filtered):,}", "note": "Current filtered view"},
             {"label": "Unique Orders", "value": f"{order_id_count:,}", "note": "Distinct Order_ID values"},
             {"label": "Unique Order Items", "value": f"{order_item_count:,}", "note": "Distinct Order_Item_ID values"},
-            {"label": "Returned Rows", "value": f"{returned_rows:,}", "note": "Rows with return status"},
+            {"label": "Returned Rows", "value": f"{returned_rows:,}", "note": "Rows with return data"},
             {"label": "Missing Order Item ID", "value": f"{missing_order_item_count:,}", "note": "Use Order_ID + FSN + SKU_ID fallback"},
         ],
         columns=5,
@@ -1315,18 +1490,30 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
     preferred_columns = [
         "Order_ID",
         "Order_Item_ID",
+        "Return_ID",
+        "Return_Type",
+        "Customer_Return_YN",
+        "Courier_Return_YN",
         "FSN",
         "SKU_ID",
         "Product_Title",
         "Order_Date",
         "Selling_Price",
         "Net_Profit",
-        "Return_Status",
         "Return_Reason",
+        "Customer_Issue_Category",
+        "Courier_Issue_Category",
+        "Customer_Return_Risk_Level",
+        "Courier_Return_Risk_Level",
     ]
     style_columns = {
-        "Return_Status": STATUS_PALETTE,
-        "Return_Issue_Category": RETURN_CATEGORY_PALETTE,
+        "Return_Type": STATUS_PALETTE,
+        "Customer_Return_YN": STATUS_PALETTE,
+        "Courier_Return_YN": STATUS_PALETTE,
+        "Customer_Issue_Category": CUSTOMER_RETURN_CATEGORY_PALETTE,
+        "Courier_Issue_Category": COURIER_RETURN_CATEGORY_PALETTE,
+        "Customer_Return_Risk_Level": RISK_PALETTE,
+        "Courier_Return_Risk_Level": RISK_PALETTE,
         "Competition_Risk_Level": RISK_PALETTE,
         "Final_Ads_Decision": DECISION_PALETTE,
     }
@@ -1340,12 +1527,8 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
     )
 
     if not filtered.empty:
-        order_item_values = "\n".join(
-            dict.fromkeys(value for value in filtered[order_item_col].fillna("").astype(str).tolist() if normalize_text(value))
-        ) if order_item_col else ""
-        order_values = "\n".join(
-            dict.fromkeys(value for value in filtered[order_id_col].fillna("").astype(str).tolist() if normalize_text(value))
-        ) if order_id_col else ""
+        order_item_values = "\n".join(dict.fromkeys(value for value in filtered[order_item_col].fillna("").astype(str).tolist() if normalize_text(value))) if order_item_col else ""
+        order_values = "\n".join(dict.fromkeys(value for value in filtered[order_id_col].fillna("").astype(str).tolist() if normalize_text(value))) if order_id_col else ""
         copy_cols = st.columns(2)
         with copy_cols[0]:
             st.text_area("Order Item IDs", value=order_item_values, height=180, help="Copy this list into Flipkart checks.", key="order_item_copy_list")
@@ -1676,9 +1859,12 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
     alerts_df = selected_rows_for_fsn(dataframe_or_empty(frames[ALERTS_TAB]), selected_fsn)
     actions_df = selected_rows_for_fsn(dataframe_or_empty(frames[ACTIONS_TAB]), selected_fsn)
     ads_df = selected_rows_for_fsn(dataframe_or_empty(frames[ADS_TAB]), selected_fsn)
-    returns_df = selected_rows_for_fsn(dataframe_or_empty(frames[RETURNS_TAB]), selected_fsn)
-    return_issue_summary_df = selected_rows_for_fsn(dataframe_or_empty(frames[RETURN_ISSUE_SUMMARY_TAB]), selected_fsn)
-    return_reason_pivot_df = selected_rows_for_fsn(dataframe_or_empty(frames[RETURN_REASON_PIVOT_TAB]), selected_fsn)
+    all_returns_df = selected_rows_for_fsn(dataframe_or_empty(frames[RETURN_ALL_DETAILS_TAB]), selected_fsn)
+    customer_summary_df = selected_rows_for_fsn(dataframe_or_empty(frames[CUSTOMER_RETURN_SUMMARY_TAB]), selected_fsn)
+    courier_summary_df = selected_rows_for_fsn(dataframe_or_empty(frames[COURIER_RETURN_SUMMARY_TAB]), selected_fsn)
+    return_type_pivot_df = selected_rows_for_fsn(dataframe_or_empty(frames[RETURN_TYPE_PIVOT_TAB]), selected_fsn)
+    customer_returns_df = selected_rows_for_fsn(dataframe_or_empty(frames[CUSTOMER_RETURN_COMMENTS_TAB]), selected_fsn)
+    courier_returns_df = selected_rows_for_fsn(dataframe_or_empty(frames[COURIER_RETURN_COMMENTS_TAB]), selected_fsn)
     listings_df = selected_rows_for_fsn(dataframe_or_empty(frames[LISTINGS_TAB]), selected_fsn)
     profit_df = selected_rows_for_fsn(dataframe_or_empty(frames[ADJUSTED_PROFIT_TAB]), selected_fsn)
     confidence_df = selected_rows_for_fsn(dataframe_or_empty(frames[MODULE_CONFIDENCE_TAB]), selected_fsn)
@@ -1696,8 +1882,8 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
             {"label": "Alerts", "value": f"{len(alerts_df):,}", "note": "Matching alert rows"},
             {"label": "Actions", "value": f"{len(actions_df):,}", "note": "Matching action rows"},
             {"label": "Profit Rows", "value": f"{len(profit_df):,}", "note": "Adjustment-aware profit"},
-            {"label": "Returns", "value": f"{len(returns_df):,}", "note": "Return issue summary rows"},
-            {"label": "Return Issues", "value": f"{len(return_issue_summary_df):,}", "note": "Summary rows"},
+            {"label": "Customer Returns", "value": f"{len(customer_returns_df):,}", "note": "Product-quality rows"},
+            {"label": "Courier Returns", "value": f"{len(courier_returns_df):,}", "note": "Logistics rows"},
             {"label": "Listings", "value": f"{len(listings_df):,}", "note": "Listing presence rows"},
             {"label": "Competitor Risk", "value": format_text_or_dash(latest_non_blank_value(competitor_df, ["Competition_Risk_Level"])), "note": "Comparable competitor view"},
         ],
@@ -1709,7 +1895,8 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
         ("FSN Metrics", fsn_metrics_df, ["FSN", "SKU_ID", "Product_Title", "Category", "Listing_Presence_Status", "Orders", "Units_Sold", "Gross_Sales", "Returns", "Return_Rate", "Net_Settlement", "Final_Net_Profit", "Final_Profit_Margin", "COGS_Status", "Final_Action", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"]),
         ("Adjusted Profit", profit_df, ["FSN", "SKU_ID", "Product_Title", "Original_Final_Net_Profit", "Total_Adjustment_Additions", "Total_Adjustment_Deductions", "Net_Adjustment", "Adjusted_Final_Net_Profit", "Adjustment_Count", "Adjustment_Status", "Last_Updated"]),
         ("Ads", ads_df, ["FSN", "SKU_ID", "Product_Title", "Final_Product_Type", "Final_Seasonality_Tag", "Ad_Run_Type", "Current_Ad_Status", "Ad_ROAS", "Ad_ACOS", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"]),
-        ("Returns", returns_df, ["FSN", "SKU_ID", "Product_Title", "Total_Returns_In_Detailed_Report", "Top_Issue_Category", "Top_Return_Reason", "Top_Return_Sub_Reason", "Critical_Issue_Count", "High_Issue_Count", "Product_Issue_Count", "Logistics_Issue_Count", "Customer_RTO_Count", "Suggested_Return_Action", "Return_Action_Priority", "Last_Updated"]),
+        ("Customer Returns", customer_summary_df, ["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Customer_Return_Count", "Customer_Return_Rate", "Quality_Issue_Count", "Defective_Product_Count", "Damaged_Product_Count", "Missing_Item_Count", "Wrong_Product_Count", "Customer_Remorse_Count", "Top_Customer_Return_Reason", "Top_Customer_Return_Sub_Reason", "Customer_Return_Risk_Level", "Suggested_Action", "Data_Gap_Reason", "Last_Updated"]),
+        ("Courier Returns", courier_summary_df, ["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Courier_Return_Count", "Courier_Return_Rate", "Order_Cancelled_Count", "Attempts_Exhausted_Count", "Shipment_Ageing_Count", "Not_Serviceable_Count", "ORC_Validated_Count", "Delivery_Failed_Count", "Top_Courier_Return_Reason", "Top_Courier_Return_Sub_Reason", "Courier_Return_Risk_Level", "Suggested_Action", "Data_Gap_Reason", "Last_Updated"]),
         ("Listings", listings_df, ["FSN", "SKU_ID", "Product_Title", "Found_In_Active_Listing", "Listing_Presence_Status", "Possible_Issue", "Suggested_Action", "Priority", "Last_Updated"]),
         ("Confidence", confidence_df, ["FSN", "SKU_ID", "Product_Title", "Overall_Confidence_Score", "Overall_Confidence_Status", "Primary_Data_Gap", "Suggested_Data_Action", "COGS_Confidence_Status", "Ads_Confidence_Status", "Format_Confidence_Status", "Alert_Risk_Status", "Last_Updated"]),
         ("Competitor", competitor_df, ["FSN", "SKU_ID", "Product_Title", "Comparable_Competitor_Count", "Median_Comparable_Competitor_Unit_Price", "Price_Gap_Percent", "Competition_Risk_Score", "Competition_Risk_Level", "Suggested_Action", "Confidence", "Last_Updated"]),
@@ -1748,10 +1935,17 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
     )
     render_dataframe_section(
         "Returns Summary for Selected FSN",
-        return_issue_summary_df,
-        "flipkart_fsn_return_issue_summary.csv",
-        preferred_columns=["FSN", "SKU_ID", "Product_Title", "Total_Returns_In_Detailed_Report", "Top_Issue_Category", "Top_Return_Reason", "Top_Return_Sub_Reason", "Critical_Issue_Count", "High_Issue_Count", "Product_Issue_Count", "Logistics_Issue_Count", "Customer_RTO_Count", "Suggested_Return_Action", "Return_Action_Priority", "Last_Updated"],
-        style_columns={"Top_Issue_Category": RETURN_CATEGORY_PALETTE, "Return_Action_Priority": STATUS_PALETTE, "Suggested_Return_Action": DECISION_PALETTE},
+        customer_summary_df,
+        "flipkart_fsn_customer_return_summary.csv",
+        preferred_columns=["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Customer_Return_Count", "Customer_Return_Rate", "Quality_Issue_Count", "Defective_Product_Count", "Damaged_Product_Count", "Missing_Item_Count", "Wrong_Product_Count", "Customer_Remorse_Count", "Top_Customer_Return_Reason", "Top_Customer_Return_Sub_Reason", "Customer_Return_Risk_Level", "Suggested_Action", "Data_Gap_Reason", "Last_Updated"],
+        style_columns={"Customer_Return_Risk_Level": RISK_PALETTE, "Suggested_Action": DECISION_PALETTE},
+    )
+    render_dataframe_section(
+        "Courier Returns for Selected FSN",
+        courier_summary_df,
+        "flipkart_fsn_courier_return_summary.csv",
+        preferred_columns=["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Courier_Return_Count", "Courier_Return_Rate", "Order_Cancelled_Count", "Attempts_Exhausted_Count", "Shipment_Ageing_Count", "Not_Serviceable_Count", "ORC_Validated_Count", "Delivery_Failed_Count", "Top_Courier_Return_Reason", "Top_Courier_Return_Sub_Reason", "Courier_Return_Risk_Level", "Suggested_Action", "Data_Gap_Reason", "Last_Updated"],
+        style_columns={"Courier_Return_Risk_Level": RISK_PALETTE, "Suggested_Action": DECISION_PALETTE},
     )
     with st.expander("Additional source tabs", expanded=False):
         render_dataframe_section(
@@ -1769,11 +1963,11 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
             style_columns={"Ads_Risk_Level": RISK_PALETTE, "Final_Ads_Decision": DECISION_PALETTE},
         )
         render_dataframe_section(
-            "Returns",
-            returns_df,
-            "flipkart_fsn_returns.csv",
-            preferred_columns=["FSN", "SKU_ID", "Product_Title", "Total_Returns_In_Detailed_Report", "Top_Issue_Category", "Top_Return_Reason", "Top_Return_Sub_Reason", "Critical_Issue_Count", "High_Issue_Count", "Product_Issue_Count", "Logistics_Issue_Count", "Customer_RTO_Count", "Suggested_Return_Action", "Return_Action_Priority", "Last_Updated"],
-            style_columns={"Return_Action_Priority": STATUS_PALETTE},
+            "Return Details",
+            all_returns_df,
+            "flipkart_fsn_return_details.csv",
+            preferred_columns=["Run_ID", "Return_ID", "Order_ID", "Order_Item_ID", "Return_Type", "Return_Bucket", "FSN", "SKU_ID", "Product_Title", "Return_Reason", "Return_Sub_Reason", "Comments", "Customer_Issue_Category", "Courier_Issue_Category", "Return_Status", "Return_Result", "Last_Updated"],
+            style_columns={"Return_Type": STATUS_PALETTE, "Return_Bucket": STATUS_PALETTE},
         )
         render_dataframe_section(
             "Listings",
@@ -1797,11 +1991,11 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
             style_columns={"Competition_Risk_Level": RISK_PALETTE, "Confidence": CONFIDENCE_PALETTE},
         )
         render_dataframe_section(
-            "Return Reason Pivot",
-            return_reason_pivot_df,
-            "flipkart_fsn_return_reason_pivot.csv",
-            preferred_columns=["Issue_Category", "Return_Reason", "Return_Sub_Reason", "Return_Count", "FSN_Count", "Top_FSNs", "Suggested_Action"],
-            style_columns={"Issue_Category": RETURN_CATEGORY_PALETTE, "Suggested_Action": DECISION_PALETTE},
+            "Return Type Pivot",
+            return_type_pivot_df,
+            "flipkart_fsn_return_type_pivot.csv",
+            preferred_columns=["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Customer_Return_Count", "Courier_Return_Count", "Unknown_Return_Count", "Total_Return_Count", "Customer_Return_Rate", "Courier_Return_Rate", "Total_Return_Rate", "Customer_vs_Courier_Mix", "Dominant_Return_Type", "Last_Updated"],
+            style_columns={"Customer_vs_Courier_Mix": STATUS_PALETTE, "Dominant_Return_Type": STATUS_PALETTE},
         )
 
 

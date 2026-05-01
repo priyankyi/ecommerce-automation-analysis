@@ -38,6 +38,8 @@ LOG_PATH = LOG_DIR / "flipkart_alerts_tasks_log.csv"
 ANALYSIS_TAB = "FLIPKART_SKU_ANALYSIS"
 COST_MASTER_TAB = "FLIPKART_COST_MASTER"
 RETURN_ISSUE_SUMMARY_TAB = "FLIPKART_RETURN_ISSUE_SUMMARY"
+CUSTOMER_RETURN_SUMMARY_TAB = "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY"
+COURIER_RETURN_SUMMARY_TAB = "FLIPKART_COURIER_RETURN_SUMMARY"
 ALERTS_TAB = "FLIPKART_ALERTS_GENERATED"
 TRACKER_TAB = "FLIPKART_ACTION_TRACKER"
 ACTIVE_TASKS_TAB = "FLIPKART_ACTIVE_TASKS"
@@ -128,12 +130,17 @@ SEVERITY_ORDER = {
 
 TOP_ALERT_TYPE_PRIORITY = {
     "Negative Final Profit": 0,
-    "Critical Return Rate": 1,
+    "Critical Customer Return Rate": 1,
     "Negative Profit Before COGS": 2,
     "Listing Not Active": 3,
     "Low Confidence With Sales": 4,
     "Low Final Profit Margin": 0,
-    "High Return Rate": 1,
+    "High Customer Return Rate": 1,
+    "High Courier Return Rate": 2,
+    "High Cancellation / RTO": 3,
+    "High Attempts Exhausted": 4,
+    "High Shipment Ageing": 5,
+    "High Not Serviceable": 6,
     "Settlement Missing": 2,
     "PNL Missing": 3,
     "Listing Missing": 4,
@@ -461,9 +468,16 @@ def build_return_issue_reason(row: Dict[str, str]) -> str:
     return " | ".join(parts)
 
 
-def build_alerts(summary: Dict[str, Any], analysis_rows: Sequence[Dict[str, str]]) -> List[Dict[str, Any]]:
+def build_alerts(
+    summary: Dict[str, Any],
+    analysis_rows: Sequence[Dict[str, str]],
+    customer_summary_rows: Sequence[Dict[str, str]],
+    courier_summary_rows: Sequence[Dict[str, str]],
+) -> List[Dict[str, Any]]:
     alerts: List[Dict[str, Any]] = []
     seen_alert_ids: set[str] = set()
+    customer_lookup = {clean_fsn(row.get("FSN", "")): dict(row) for row in customer_summary_rows if clean_fsn(row.get("FSN", ""))}
+    courier_lookup = {clean_fsn(row.get("FSN", "")): dict(row) for row in courier_summary_rows if clean_fsn(row.get("FSN", ""))}
 
     for row in analysis_rows:
         fsn = clean_fsn(row.get("FSN", ""))
@@ -489,6 +503,24 @@ def build_alerts(summary: Dict[str, Any], analysis_rows: Sequence[Dict[str, str]
         data_confidence = normalize_text(row.get("Data_Confidence", "")).upper()
         missing_data = normalize_text(row.get("Missing_Data", ""))
         listing_status = normalize_text(row.get("Listing_Status", ""))
+        customer_row = customer_lookup.get(fsn, {})
+        courier_row = courier_lookup.get(fsn, {})
+        customer_return_rate = parse_float(customer_row.get("Customer_Return_Rate", ""))
+        courier_return_rate = parse_float(courier_row.get("Courier_Return_Rate", ""))
+        customer_return_count = int(parse_float(customer_row.get("Customer_Return_Count", "")))
+        courier_return_count = int(parse_float(courier_row.get("Courier_Return_Count", "")))
+        defective_count = int(parse_float(customer_row.get("Defective_Product_Count", "")))
+        damaged_count = int(parse_float(customer_row.get("Damaged_Product_Count", "")))
+        missing_item_count = int(parse_float(customer_row.get("Missing_Item_Count", "")))
+        wrong_product_count = int(parse_float(customer_row.get("Wrong_Product_Count", "")))
+        remorse_count = int(parse_float(customer_row.get("Customer_Remorse_Count", "")))
+        quality_issue_count = int(parse_float(customer_row.get("Quality_Issue_Count", "")))
+        order_cancelled_count = int(parse_float(courier_row.get("Order_Cancelled_Count", "")))
+        attempts_exhausted_count = int(parse_float(courier_row.get("Attempts_Exhausted_Count", "")))
+        shipment_ageing_count = int(parse_float(courier_row.get("Shipment_Ageing_Count", "")))
+        not_serviceable_count = int(parse_float(courier_row.get("Not_Serviceable_Count", "")))
+        orc_validated_count = int(parse_float(courier_row.get("ORC_Validated_Count", "")))
+        delivery_failed_count = int(parse_float(courier_row.get("Delivery_Failed_Count", "")))
         base_reason = build_reason(row, "Triggered from FLIPKART_SKU_ANALYSIS")
 
         def add_alert(
@@ -585,15 +617,15 @@ def build_alerts(summary: Dict[str, Any], analysis_rows: Sequence[Dict[str, str]
                 source_field="Final_Profit_Margin",
             )
 
-        if return_rate >= 0.50 and orders >= 2:
+        if customer_row and customer_return_rate >= 0.50 and orders >= 2:
             add_alert(
-                alert_type="Critical Return Rate",
+                alert_type="Critical Customer Return Rate",
                 severity="Critical",
-                trigger_value=f"{return_rate:.2f}",
+                trigger_value=f"{customer_return_rate:.2f}",
                 threshold=">= 0.50 and Orders >= 2",
                 suggested_action="Fix Product/Listing",
-                reason=base_reason,
-                source_field="Return_Rate",
+                reason=f"{base_reason} | Customer return rate is critical",
+                source_field=CUSTOMER_RETURN_SUMMARY_TAB,
             )
 
         if is_listing_not_active(listing_status):
@@ -607,15 +639,125 @@ def build_alerts(summary: Dict[str, Any], analysis_rows: Sequence[Dict[str, str]
                 source_field="Listing_Status",
             )
 
-        if return_rate >= 0.20 and orders >= 2:
+        if customer_row and customer_return_rate >= 0.20 and orders >= 2:
             add_alert(
-                alert_type="High Return Rate",
+                alert_type="High Customer Return Rate",
                 severity="High",
-                trigger_value=f"{return_rate:.2f}",
+                trigger_value=f"{customer_return_rate:.2f}",
                 threshold=">= 0.20 and Orders >= 2",
                 suggested_action="Fix Product/Listing",
-                reason=base_reason,
-                source_field="Return_Rate",
+                reason=f"{base_reason} | Customer return rate is elevated",
+                source_field=CUSTOMER_RETURN_SUMMARY_TAB,
+            )
+
+        if courier_row and courier_return_rate >= 0.20 and orders >= 2:
+            add_alert(
+                alert_type="High Courier Return Rate",
+                severity="High",
+                trigger_value=f"{courier_return_rate:.2f}",
+                threshold=">= 0.20 and Orders >= 2",
+                suggested_action="Check Logistics",
+                reason=f"{base_reason} | Courier return rate is elevated",
+                source_field=COURIER_RETURN_SUMMARY_TAB,
+            )
+
+        if courier_row and (order_cancelled_count + attempts_exhausted_count) >= 2:
+            add_alert(
+                alert_type="High Cancellation / RTO",
+                severity="High",
+                trigger_value=str(order_cancelled_count + attempts_exhausted_count),
+                threshold=">= 2",
+                suggested_action="Check Cancellation / RTO Process",
+                reason=f"{base_reason} | Cancellation/RTO count: {order_cancelled_count + attempts_exhausted_count}",
+                source_field=COURIER_RETURN_SUMMARY_TAB,
+            )
+
+        if courier_row and attempts_exhausted_count >= 2:
+            add_alert(
+                alert_type="High Attempts Exhausted",
+                severity="High",
+                trigger_value=str(attempts_exhausted_count),
+                threshold=">= 2",
+                suggested_action="Check Delivery Attempts / Contactability",
+                reason=f"{base_reason} | Attempts exhausted count: {attempts_exhausted_count}",
+                source_field=COURIER_RETURN_SUMMARY_TAB,
+            )
+
+        if courier_row and shipment_ageing_count >= 2:
+            add_alert(
+                alert_type="High Shipment Ageing",
+                severity="Medium",
+                trigger_value=str(shipment_ageing_count),
+                threshold=">= 2",
+                suggested_action="Check Shipment Aging / TAT",
+                reason=f"{base_reason} | Shipment ageing count: {shipment_ageing_count}",
+                source_field=COURIER_RETURN_SUMMARY_TAB,
+            )
+
+        if courier_row and not_serviceable_count > 0:
+            add_alert(
+                alert_type="High Not Serviceable",
+                severity="High",
+                trigger_value=str(not_serviceable_count),
+                threshold="> 0",
+                suggested_action="Check Serviceability / Pincode Coverage",
+                reason=f"{base_reason} | Not serviceable count: {not_serviceable_count}",
+                source_field=COURIER_RETURN_SUMMARY_TAB,
+            )
+
+        if customer_row and defective_count > 0:
+            add_alert(
+                alert_type="Product Not Working Returns",
+                severity="High",
+                trigger_value=str(defective_count),
+                threshold="> 0",
+                suggested_action="Check QC / Supplier / Product Defect",
+                reason=f"{base_reason} | Defective customer returns: {defective_count}",
+                source_field=CUSTOMER_RETURN_SUMMARY_TAB,
+            )
+
+        if customer_row and damaged_count > 0:
+            add_alert(
+                alert_type="Packaging Damage Issue",
+                severity="High",
+                trigger_value=str(damaged_count),
+                threshold="> 0",
+                suggested_action="Improve Packaging / Courier Handling",
+                reason=f"{base_reason} | Damaged customer returns: {damaged_count}",
+                source_field=CUSTOMER_RETURN_SUMMARY_TAB,
+            )
+
+        if customer_row and wrong_product_count > 0:
+            add_alert(
+                alert_type="Listing Expectation Mismatch",
+                severity="High",
+                trigger_value=str(wrong_product_count),
+                threshold="> 0",
+                suggested_action="Improve Picking / Listing Claims",
+                reason=f"{base_reason} | Wrong product customer returns: {wrong_product_count}",
+                source_field=CUSTOMER_RETURN_SUMMARY_TAB,
+            )
+
+        if customer_row and quality_issue_count >= 2:
+            add_alert(
+                alert_type="Product Issue Cluster",
+                severity="High",
+                trigger_value=str(quality_issue_count),
+                threshold=">= 2",
+                suggested_action="Fix Product / Listing First",
+                reason=f"{base_reason} | Customer product issue cluster: {quality_issue_count}",
+                source_field=CUSTOMER_RETURN_SUMMARY_TAB,
+            )
+
+        if customer_row and remorse_count >= 2:
+            add_alert(
+                alert_type="Customer Return Cluster",
+                severity="Low",
+                trigger_value=str(remorse_count),
+                threshold=">= 2",
+                suggested_action="Monitor Demand / Positioning",
+                reason=f"{base_reason} | Customer remorse count: {remorse_count}",
+                source_field=CUSTOMER_RETURN_SUMMARY_TAB,
             )
 
         if "Settlement Missing" in missing_data and orders > 0:
@@ -717,6 +859,17 @@ def build_alerts(summary: Dict[str, Any], analysis_rows: Sequence[Dict[str, str]
                 source_field="Data_Confidence",
             )
 
+        if customer_row and customer_return_rate >= 0.50 and final_profit_margin < 0.10:
+            add_alert(
+                alert_type="Critical Customer Return Rate",
+                severity="Critical",
+                trigger_value=f"{customer_return_rate:.2f}",
+                threshold=">= 0.50 and Orders >= 2",
+                suggested_action="Fix Product First",
+                reason=f"{base_reason} | High customer return pressure and weak profit",
+                source_field=CUSTOMER_RETURN_SUMMARY_TAB,
+            )
+
     alerts.sort(
         key=lambda alert: (
             SEVERITY_ORDER.get(alert["Severity"], 99),
@@ -730,153 +883,11 @@ def build_alerts(summary: Dict[str, Any], analysis_rows: Sequence[Dict[str, str]
 
 def build_return_issue_alerts(
     summary: Dict[str, Any],
-    return_issue_rows: Sequence[Dict[str, str]],
+    customer_summary_rows: Sequence[Dict[str, str]],
+    courier_summary_rows: Sequence[Dict[str, str]],
     existing_alert_ids: Optional[Iterable[str]] = None,
 ) -> List[Dict[str, Any]]:
-    alerts: List[Dict[str, Any]] = []
-    seen_alert_ids: set[str] = {normalize_text(alert_id) for alert_id in (existing_alert_ids or []) if normalize_text(alert_id)}
-
-    for row in return_issue_rows:
-        fsn = clean_fsn(row.get("FSN", ""))
-        if not fsn:
-            continue
-
-        critical_issue_count = int(parse_float(row.get("Critical_Issue_Count", "")))
-        high_issue_count = int(parse_float(row.get("High_Issue_Count", "")))
-        product_issue_count = int(parse_float(row.get("Product_Issue_Count", "")))
-        logistics_issue_count = int(parse_float(row.get("Logistics_Issue_Count", "")))
-        customer_rto_count = int(parse_float(row.get("Customer_RTO_Count", "")))
-        top_issue_category = normalize_text(row.get("Top_Issue_Category", ""))
-        top_issue_category_norm = top_issue_category.lower()
-        base_reason = build_return_issue_reason(row)
-
-        def add_alert(
-            *,
-            alert_type: str,
-            severity: str,
-            trigger_value: str,
-            threshold: str,
-            suggested_action: str,
-            reason: str,
-        ) -> None:
-            source_field = RETURN_ISSUE_SUMMARY_TAB
-            alert_id = stable_alert_id(fsn, alert_type, source_field)
-            if alert_id in seen_alert_ids:
-                return
-            seen_alert_ids.add(alert_id)
-            alerts.append(
-                build_alert_row(
-                    summary=summary,
-                    row=row,
-                    alert_type=alert_type,
-                    severity=severity,
-                    trigger_value=trigger_value,
-                    threshold=threshold,
-                    suggested_action=suggested_action,
-                    reason=reason,
-                    source_field=source_field,
-                )
-            )
-
-        if critical_issue_count > 0:
-            add_alert(
-                alert_type="Critical Return Issue",
-                severity="Critical",
-                trigger_value=str(critical_issue_count),
-                threshold="> 0",
-                suggested_action="Fix Product/QC/Packaging Based On Return Reason",
-                reason=f"{base_reason} | Critical issue count: {critical_issue_count}",
-            )
-
-        if product_issue_count >= 3:
-            add_alert(
-                alert_type="Repeated Product Issue",
-                severity="Critical",
-                trigger_value=str(product_issue_count),
-                threshold=">= 3",
-                suggested_action="Check QC / Supplier / Listing Claims",
-                reason=f"{base_reason} | Product issue count: {product_issue_count}",
-            )
-
-        if top_issue_category_norm == "return fraud / suspicious":
-            add_alert(
-                alert_type="Return Fraud Risk",
-                severity="Critical",
-                trigger_value=top_issue_category or "Return Fraud / Suspicious",
-                threshold="Top_Issue_Category = Return Fraud / Suspicious",
-                suggested_action="Raise Claim / Investigate",
-                reason=base_reason,
-            )
-
-        if product_issue_count >= 2:
-            add_alert(
-                alert_type="Product Issue Cluster",
-                severity="High",
-                trigger_value=str(product_issue_count),
-                threshold=">= 2",
-                suggested_action="Fix Product/Listing",
-                reason=f"{base_reason} | Product issue count: {product_issue_count}",
-            )
-
-        if top_issue_category_norm == "damaged product" and critical_issue_count > 0:
-            add_alert(
-                alert_type="Packaging Damage Issue",
-                severity="High",
-                trigger_value=top_issue_category or "Damaged Product",
-                threshold="Top_Issue_Category = Damaged Product and Critical_Issue_Count > 0",
-                suggested_action="Improve Packaging / Courier Handling",
-                reason=f"{base_reason} | Critical issue count: {critical_issue_count}",
-            )
-
-        if top_issue_category_norm == "product not working":
-            add_alert(
-                alert_type="Product Not Working Returns",
-                severity="High",
-                trigger_value=top_issue_category or "Product Not Working",
-                threshold="Top_Issue_Category = Product Not Working",
-                suggested_action="Check QC / Supplier",
-                reason=base_reason,
-            )
-
-        if top_issue_category_norm == "size / expectation mismatch":
-            add_alert(
-                alert_type="Listing Expectation Mismatch",
-                severity="High",
-                trigger_value=top_issue_category or "Size / Expectation Mismatch",
-                threshold="Top_Issue_Category = Size / Expectation Mismatch",
-                suggested_action="Improve Photos, Dimensions, Description",
-                reason=base_reason,
-            )
-
-        if logistics_issue_count >= 2:
-            add_alert(
-                alert_type="Logistics Return Cluster",
-                severity="Medium",
-                trigger_value=str(logistics_issue_count),
-                threshold=">= 2",
-                suggested_action="Monitor Courier / Delivery Issue",
-                reason=f"{base_reason} | Logistics issue count: {logistics_issue_count}",
-            )
-
-        if top_issue_category_norm == "customer refused / rto":
-            add_alert(
-                alert_type="Customer RTO Issue",
-                severity="Medium",
-                trigger_value=top_issue_category or "Customer Refused / RTO",
-                threshold="Top_Issue_Category = Customer Refused / RTO",
-                suggested_action="Check COD / Delivery Confirmation",
-                reason=f"{base_reason} | Customer RTO count: {customer_rto_count}",
-            )
-
-    alerts.sort(
-        key=lambda alert: (
-            SEVERITY_ORDER.get(alert["Severity"], 99),
-            TOP_ALERT_TYPE_PRIORITY.get(normalize_text(alert.get("Alert_Type", "")), 99),
-            alert["FSN"],
-            alert["Alert_Type"],
-        )
-    )
-    return alerts
+    return []
 
 
 def build_tracker_lookup(rows: Sequence[Dict[str, str]]) -> Dict[str, Tuple[int, Dict[str, str]]]:
@@ -1090,7 +1101,8 @@ def create_flipkart_alerts_and_tasks() -> Dict[str, Any]:
     sheets_service, _, _ = build_services()
     ensure_required_tab_exists(sheets_service, spreadsheet_id, ANALYSIS_TAB)
     ensure_required_tab_exists(sheets_service, spreadsheet_id, COST_MASTER_TAB)
-    ensure_required_tab_exists(sheets_service, spreadsheet_id, RETURN_ISSUE_SUMMARY_TAB)
+    ensure_required_tab_exists(sheets_service, spreadsheet_id, CUSTOMER_RETURN_SUMMARY_TAB)
+    ensure_required_tab_exists(sheets_service, spreadsheet_id, COURIER_RETURN_SUMMARY_TAB)
 
     alerts_sheet_id = ensure_tab(sheets_service, spreadsheet_id, ALERTS_TAB)
     tracker_sheet_id = ensure_tab(sheets_service, spreadsheet_id, TRACKER_TAB)
@@ -1099,12 +1111,14 @@ def create_flipkart_alerts_and_tasks() -> Dict[str, Any]:
     summary = load_json(summary_path)
     _, analysis_rows = read_table(sheets_service, spreadsheet_id, ANALYSIS_TAB)
     _, cost_rows = read_table(sheets_service, spreadsheet_id, COST_MASTER_TAB)
-    _, return_issue_rows = read_table(sheets_service, spreadsheet_id, RETURN_ISSUE_SUMMARY_TAB)
+    _, customer_return_rows = read_table(sheets_service, spreadsheet_id, CUSTOMER_RETURN_SUMMARY_TAB)
+    _, courier_return_rows = read_table(sheets_service, spreadsheet_id, COURIER_RETURN_SUMMARY_TAB)
     live_analysis_rows = hydrate_analysis_rows(analysis_rows, cost_rows)
-    alerts = build_alerts(summary, live_analysis_rows)
+    alerts = build_alerts(summary, live_analysis_rows, customer_return_rows, courier_return_rows)
     return_issue_alerts = build_return_issue_alerts(
         summary,
-        return_issue_rows,
+        customer_return_rows,
+        courier_return_rows,
         existing_alert_ids={alert["Alert_ID"] for alert in alerts},
     )
     alerts.extend(return_issue_alerts)
@@ -1154,23 +1168,28 @@ def create_flipkart_alerts_and_tasks() -> Dict[str, Any]:
     high_count = sum(1 for alert in alerts if alert["Severity"] == "High")
     medium_count = sum(1 for alert in alerts if alert["Severity"] == "Medium")
     low_count = sum(1 for alert in alerts if alert["Severity"] == "Low")
-    return_issue_alert_count = sum(1 for alert in alerts if normalize_text(alert.get("Source_Field", "")) == RETURN_ISSUE_SUMMARY_TAB)
+    return_issue_alert_count = sum(
+        1
+        for alert in alerts
+        if normalize_text(alert.get("Source_Field", "")) in {CUSTOMER_RETURN_SUMMARY_TAB, COURIER_RETURN_SUMMARY_TAB}
+    )
     critical_return_issue_alert_count = sum(
         1
         for alert in alerts
-        if normalize_text(alert.get("Source_Field", "")) == RETURN_ISSUE_SUMMARY_TAB and alert["Severity"] == "Critical"
+        if normalize_text(alert.get("Source_Field", "")) in {CUSTOMER_RETURN_SUMMARY_TAB, COURIER_RETURN_SUMMARY_TAB}
+        and alert["Severity"] == "Critical"
     )
     product_issue_cluster_alert_count = sum(
         1
         for alert in alerts
-        if normalize_text(alert.get("Source_Field", "")) == RETURN_ISSUE_SUMMARY_TAB
-        and normalize_text(alert.get("Alert_Type", "")) == "Product Issue Cluster"
+        if normalize_text(alert.get("Source_Field", "")) == CUSTOMER_RETURN_SUMMARY_TAB
+        and normalize_text(alert.get("Alert_Type", "")) in {"Product Issue Cluster", "Product Not Working Returns", "Packaging Damage Issue", "Listing Expectation Mismatch"}
     )
     logistics_return_alert_count = sum(
         1
         for alert in alerts
-        if normalize_text(alert.get("Source_Field", "")) == RETURN_ISSUE_SUMMARY_TAB
-        and normalize_text(alert.get("Alert_Type", "")) == "Logistics Return Cluster"
+        if normalize_text(alert.get("Source_Field", "")) == COURIER_RETURN_SUMMARY_TAB
+        and normalize_text(alert.get("Alert_Type", "")) in {"High Courier Return Rate", "High Cancellation / RTO", "High Attempts Exhausted", "High Shipment Ageing", "High Not Serviceable"}
     )
     active_tasks_count = len(active_tasks_rows)
 

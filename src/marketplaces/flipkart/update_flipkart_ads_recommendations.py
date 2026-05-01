@@ -50,6 +50,8 @@ LOCAL_OUTPUT_PATH = OUTPUT_DIR / "flipkart_ads_final_recommendations.csv"
 
 SKU_ANALYSIS_TAB = "FLIPKART_SKU_ANALYSIS"
 RETURN_ISSUE_SUMMARY_TAB = "FLIPKART_RETURN_ISSUE_SUMMARY"
+CUSTOMER_RETURN_SUMMARY_TAB = "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY"
+COURIER_RETURN_SUMMARY_TAB = "FLIPKART_COURIER_RETURN_SUMMARY"
 ACTIVE_TASKS_TAB = "FLIPKART_ACTIVE_TASKS"
 PRODUCT_AD_PROFILE_TAB = "FLIPKART_PRODUCT_AD_PROFILE"
 DEMAND_PROFILE_TAB = "PRODUCT_TYPE_DEMAND_PROFILE"
@@ -60,6 +62,8 @@ REQUIRED_TABS = [
     ADS_MAPPING_ISSUES_TAB,
     SKU_ANALYSIS_TAB,
     RETURN_ISSUE_SUMMARY_TAB,
+    CUSTOMER_RETURN_SUMMARY_TAB,
+    COURIER_RETURN_SUMMARY_TAB,
     ACTIVE_TASKS_TAB,
     PRODUCT_AD_PROFILE_TAB,
     DEMAND_PROFILE_TAB,
@@ -71,8 +75,11 @@ DECISION_PRIORITY = [
     "Do Not Run Ads",
     "Improve Economics Before Ads",
     "Do Not Run Ads / Improve Economics",
+    "Do Not Run Ads / Improve Product First",
     "Fix Product First",
     "Fix Product/Listing First",
+    "Test Ads Carefully / Fix Product First",
+    "Test Ads Carefully / Check Logistics",
     "Resolve Critical Alert First",
     "Fix Ads Mapping",
     "Scale Ads",
@@ -106,6 +113,11 @@ DECISION_METADATA: Dict[str, Dict[str, str]] = {
         "risk": "High",
         "opportunity": "Low",
     },
+    "Do Not Run Ads / Improve Product First": {
+        "budget": "Do Not Run",
+        "risk": "Critical",
+        "opportunity": "Low",
+    },
     "Improve Economics Before Ads": {
         "budget": "Do Not Run",
         "risk": "High",
@@ -120,6 +132,16 @@ DECISION_METADATA: Dict[str, Dict[str, str]] = {
         "budget": "Do Not Run",
         "risk": "High",
         "opportunity": "Low",
+    },
+    "Test Ads Carefully / Fix Product First": {
+        "budget": "Low Test",
+        "risk": "High",
+        "opportunity": "Medium",
+    },
+    "Test Ads Carefully / Check Logistics": {
+        "budget": "Low Test",
+        "risk": "Medium",
+        "opportunity": "Medium",
     },
     "Resolve Critical Alert First": {
         "budget": "Do Not Run",
@@ -190,7 +212,7 @@ READY_SEASONALITY_TEST = {
     "Year-Round + Festive Boost",
 }
 
-ACTIVE_DECISIONS = {"Scale Ads", "Continue / Optimize Ads", "Test Ads", "Always-On Test", "Seasonal/Event Test"}
+ACTIVE_DECISIONS = {"Scale Ads", "Continue / Optimize Ads", "Test Ads", "Always-On Test", "Seasonal/Event Test", "Test Ads Carefully / Fix Product First", "Test Ads Carefully / Check Logistics"}
 BLOCKED_DECISIONS = {
     "Fill COGS First",
     "Do Not Run Ads",
@@ -198,6 +220,9 @@ BLOCKED_DECISIONS = {
     "Improve Economics Before Ads",
     "Fix Product First",
     "Fix Product/Listing First",
+    "Do Not Run Ads / Improve Product First",
+    "Test Ads Carefully / Fix Product First",
+    "Test Ads Carefully / Check Logistics",
     "Resolve Critical Alert First",
     "Fix Ads Mapping",
 }
@@ -482,12 +507,14 @@ def build_ads_data_used(
     ads_metrics: Dict[str, Any],
     analysis_row: Dict[str, str],
     return_row: Dict[str, str],
+    courier_row: Dict[str, str],
     active_task_row: Dict[str, Any],
 ) -> str:
     parts = [
         "Internal Profit",
         "COGS",
-        "Return Rate",
+        "Customer Return Rate",
+        "Courier Return Rate",
         "Active Alerts",
         "Product Type",
         "Seasonality",
@@ -496,8 +523,8 @@ def build_ads_data_used(
         parts.append("Ads ROAS/ACOS")
     else:
         parts.append("Ads ROAS/ACOS unavailable")
-    if normalize_text(return_row.get("Return_Action_Priority", "")) or normalize_text(return_row.get("Suggested_Return_Action", "")):
-        parts.append("Return Issue Summary")
+    if normalize_text(return_row.get("Customer_Return_Risk_Level", "")) or normalize_text(courier_row.get("Courier_Return_Risk_Level", "")):
+        parts.append("Return Intelligence v2")
     if normalize_text(active_task_row.get("Severity", "")):
         parts.append("Active Alert Severity")
     if normalize_text(readiness.get("Final_Net_Profit", "")):
@@ -511,6 +538,7 @@ def build_reason(
     readiness: Dict[str, str],
     analysis_row: Dict[str, str],
     return_row: Dict[str, str],
+    courier_row: Dict[str, str],
     active_task_row: Dict[str, Any],
     product_type: str,
     seasonality_tag: str,
@@ -528,6 +556,12 @@ def build_reason(
         return f"Return rate is critical{'; return summary confirms critical issues' if normalize_text(return_row.get('Return_Action_Priority', '')) == 'Critical' else ''}"
     if final_decision == "Fix Product/Listing First":
         return f"Return rate is elevated{'; return summary shows elevated return pressure' if normalize_text(return_row.get('Return_Action_Priority', '')) in {'Critical', 'High'} else ''}"
+    if final_decision == "Do Not Run Ads / Improve Product First":
+        return f"Customer return rate is critical ({normalize_text(return_row.get('Customer_Return_Rate', '')) or 'n/a'}) and margin is weak"
+    if final_decision == "Test Ads Carefully / Fix Product First":
+        return f"Customer return risk remains elevated ({normalize_text(return_row.get('Customer_Return_Risk_Level', '')) or 'n/a'})"
+    if final_decision == "Test Ads Carefully / Check Logistics":
+        return f"Courier return risk is elevated ({normalize_text(courier_row.get('Courier_Return_Risk_Level', '')) or 'n/a'}); check logistics before scaling"
     if final_decision == "Resolve Critical Alert First":
         return "Critical active alert exists"
     if final_decision == "Fix Ads Mapping":
@@ -557,6 +591,7 @@ def choose_decision(
     planner_row: Dict[str, str],
     analysis_row: Dict[str, str],
     return_row: Dict[str, str],
+    courier_row: Dict[str, str],
     active_task_row: Dict[str, Any],
     product_type: str,
     seasonality_tag: str,
@@ -570,20 +605,29 @@ def choose_decision(
         final_decision = manual_final
     else:
         readiness = resolve_readiness(planner_row, analysis_row, active_task_row)
+        customer_return_rate = safe_float(return_row.get("Customer_Return_Rate", ""))
+        customer_return_risk = normalize_text(return_row.get("Customer_Return_Risk_Level", ""))
+        courier_return_rate = safe_float(courier_row.get("Courier_Return_Rate", ""))
+        courier_return_risk = normalize_text(courier_row.get("Courier_Return_Risk_Level", ""))
+        profit_margin = safe_float(analysis_row.get("Final_Profit_Margin", ""))
         if has_cogs_missing(readiness):
             final_decision = "Fill COGS First"
         elif has_negative_profit(analysis_row):
             final_decision = "Do Not Run Ads"
-        elif safe_float(analysis_row.get("Final_Profit_Margin", "")) < 0.10:
-            final_decision = "Improve Economics Before Ads"
-        elif safe_float(analysis_row.get("Return_Rate", "")) >= 0.50:
-            final_decision = "Fix Product First"
-        elif safe_float(analysis_row.get("Return_Rate", "")) >= 0.20:
+        elif customer_return_risk in {"Critical", "High"} and customer_return_rate >= 0.20 and profit_margin < 0.10:
+            final_decision = "Do Not Run Ads / Improve Product First"
+        elif customer_return_risk in {"Critical", "High"} and customer_return_rate >= 0.20 and profit_margin < 0.20:
+            final_decision = "Test Ads Carefully / Fix Product First"
+        elif customer_return_risk in {"Critical", "High"} and customer_return_rate >= 0.20:
             final_decision = "Fix Product/Listing First"
+        elif profit_margin < 0.10:
+            final_decision = "Improve Economics Before Ads"
         elif normalize_text(active_task_row.get("Severity", "")) == "Critical":
             final_decision = "Resolve Critical Alert First"
         elif normalize_text(ads_metrics["ads_mapping_status"]) == "Issue" or normalize_text(planner_row.get("Current_Ad_Status", "")) == "Ads Mapping Issue":
             final_decision = "Fix Ads Mapping"
+        elif courier_return_risk in {"Critical", "High"} and customer_return_rate < 0.20 and profit_margin >= 0.20:
+            final_decision = "Test Ads Carefully / Check Logistics"
         elif ads_metrics["ads_data_available"] and safe_float(ads_metrics["ad_acos"]) <= 0.20 and safe_float(ads_metrics["ad_roas"]) >= 5 and is_healthy_margin(analysis_row):
             final_decision = "Scale Ads"
         elif ads_metrics["ads_data_available"] and safe_float(ads_metrics["ad_acos"]) <= 0.35 and safe_float(ads_metrics["ad_roas"]) >= 3:
@@ -662,6 +706,10 @@ def append_new_columns(headers: Sequence[str]) -> List[str]:
         "Ads_Decision_Reason",
         "Ads_Risk_Level",
         "Ads_Opportunity_Level",
+        "Customer_Return_Rate",
+        "Customer_Return_Risk_Level",
+        "Courier_Return_Rate",
+        "Courier_Return_Risk_Level",
         "Next_Ad_Action_Date",
         "Ads_Review_Date",
         "Ads_Data_Used",
@@ -687,15 +735,17 @@ def build_final_rows(
     planner_rows: Sequence[Dict[str, str]],
     analysis_rows: Sequence[Dict[str, str]],
     summary_rows: Sequence[Dict[str, str]],
+    customer_summary_rows: Sequence[Dict[str, str]],
+    courier_summary_rows: Sequence[Dict[str, str]],
     issue_rows: Sequence[Dict[str, str]],
-    return_rows: Sequence[Dict[str, str]],
     active_task_rows: Sequence[Dict[str, str]],
     product_profile_rows: Sequence[Dict[str, str]],
     demand_profile_rows: Sequence[Dict[str, Any]],
 ) -> Tuple[List[str], List[Dict[str, Any]]]:
     analysis_index = build_index(analysis_rows)
     summary_index = build_index(summary_rows)
-    return_index = build_index(return_rows)
+    customer_summary_index = build_index(customer_summary_rows)
+    courier_summary_index = build_index(courier_summary_rows)
     product_profile_index = build_index(product_profile_rows)
     demand_lookup = demand_profile_lookup(demand_profile_rows)
     active_task_group = build_grouped_tasks(active_task_rows)
@@ -708,7 +758,8 @@ def build_final_rows(
         fsn = clean_fsn(planner_row.get("FSN", ""))
         analysis_row = analysis_index.get(fsn, {})
         summary_row = summary_index.get(fsn, {})
-        return_row = return_index.get(fsn, {})
+        customer_row = customer_summary_index.get(fsn, {})
+        courier_row = courier_summary_index.get(fsn, {})
         product_profile_row = product_profile_index.get(fsn, {})
         active_row = highest_severity_task(active_task_group.get(fsn, []))
         demand_row = demand_lookup.get(
@@ -732,7 +783,8 @@ def build_final_rows(
         final_decision, budget, risk, opportunity, manual_override = choose_decision(
             planner_row,
             analysis_row,
-            return_row,
+            customer_row,
+            courier_row,
             active_row,
             final_product_type,
             final_seasonality_tag,
@@ -743,7 +795,8 @@ def build_final_rows(
             manual_override,
             readiness,
             analysis_row,
-            return_row,
+            customer_row,
+            courier_row,
             active_row,
             final_product_type,
             final_seasonality_tag,
@@ -755,7 +808,7 @@ def build_final_rows(
             manual_remarks = normalize_text(planner_row.get("Manual_Override", ""))
 
         next_action_date, review_date = compute_action_dates(final_decision, planner_row, demand_row, final_product_type, final_seasonality_tag)
-        ads_data_used = build_ads_data_used(readiness, final_product_type, final_seasonality_tag, ads_metrics, analysis_row, return_row, active_row)
+        ads_data_used = build_ads_data_used(readiness, final_product_type, final_seasonality_tag, ads_metrics, analysis_row, customer_row, courier_row, active_row)
 
         updated = dict(planner_row)
         updated["Final_Ads_Decision"] = final_decision
@@ -763,6 +816,10 @@ def build_final_rows(
         updated["Ads_Decision_Reason"] = decision_reason
         updated["Ads_Risk_Level"] = risk
         updated["Ads_Opportunity_Level"] = opportunity
+        updated["Customer_Return_Rate"] = normalize_text(customer_row.get("Customer_Return_Rate", ""))
+        updated["Customer_Return_Risk_Level"] = normalize_text(customer_row.get("Customer_Return_Risk_Level", ""))
+        updated["Courier_Return_Rate"] = normalize_text(courier_row.get("Courier_Return_Rate", ""))
+        updated["Courier_Return_Risk_Level"] = normalize_text(courier_row.get("Courier_Return_Risk_Level", ""))
         updated["Next_Ad_Action_Date"] = next_action_date
         updated["Ads_Review_Date"] = review_date
         updated["Ads_Data_Used"] = ads_data_used
@@ -792,7 +849,8 @@ def update_flipkart_ads_recommendations() -> Dict[str, Any]:
     _, summary_rows = read_sheet_table(sheets_service, spreadsheet_id, ADS_SUMMARY_TAB)
     _, issue_rows = read_sheet_table(sheets_service, spreadsheet_id, ADS_MAPPING_ISSUES_TAB)
     _, analysis_rows = read_sheet_table(sheets_service, spreadsheet_id, SKU_ANALYSIS_TAB)
-    _, return_rows = read_sheet_table(sheets_service, spreadsheet_id, RETURN_ISSUE_SUMMARY_TAB)
+    _, customer_return_rows = read_sheet_table(sheets_service, spreadsheet_id, CUSTOMER_RETURN_SUMMARY_TAB)
+    _, courier_return_rows = read_sheet_table(sheets_service, spreadsheet_id, COURIER_RETURN_SUMMARY_TAB)
     _, active_task_rows = read_sheet_table(sheets_service, spreadsheet_id, ACTIVE_TASKS_TAB)
     _, product_profile_rows = read_sheet_table(sheets_service, spreadsheet_id, PRODUCT_AD_PROFILE_TAB)
     _, demand_profile_rows = read_sheet_table(sheets_service, spreadsheet_id, DEMAND_PROFILE_TAB)
@@ -802,8 +860,9 @@ def update_flipkart_ads_recommendations() -> Dict[str, Any]:
         planner_rows,
         analysis_rows,
         summary_rows,
+        customer_return_rows,
+        courier_return_rows,
         issue_rows,
-        return_rows,
         active_task_rows,
         product_profile_rows,
         demand_profile_rows,

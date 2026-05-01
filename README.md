@@ -189,6 +189,12 @@ python -m src.marketplaces.flipkart.create_flipkart_fsn_drilldown
 python -m src.marketplaces.flipkart.verify_flipkart_return_issue_integration
 ```
 
+Stage 7C return intelligence v2:
+```powershell
+python -m src.marketplaces.flipkart.create_flipkart_return_intelligence_v2
+python -m src.marketplaces.flipkart.verify_flipkart_return_intelligence_v2
+```
+
 Stage 8 ads planner foundation:
 ```powershell
 python -m src.marketplaces.flipkart.create_flipkart_ads_planner_foundation
@@ -328,7 +334,8 @@ Looker Studio connection guide:
 8. Use `LOOKER_FLIPKART_FSN_METRICS` for the product table
 9. Use `LOOKER_FLIPKART_ALERTS` and `LOOKER_FLIPKART_ACTIONS` for the operational dashboard
 10. Use `LOOKER_FLIPKART_ADS`, `LOOKER_FLIPKART_RETURNS`, and `LOOKER_FLIPKART_LISTINGS` for the supporting views
-11. Use `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER` for copy-friendly Order ID / Order Item ID checks
+11. Use `LOOKER_FLIPKART_RETURN_ALL_DETAILS`, `LOOKER_FLIPKART_CUSTOMER_RETURNS`, `LOOKER_FLIPKART_COURIER_RETURNS`, and `LOOKER_FLIPKART_RETURN_TYPE_PIVOT` for return intelligence
+12. Use `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER` for copy-friendly Order ID / Order Item ID checks
 
 Stage 6 note:
 - `create_flipkart_alerts_and_tasks` now prefers `Final_Net_Profit` and `Final_Profit_Margin` when `COGS_Status` is `Entered` or `Verified`, and falls back to `Net_Profit_Before_COGS` plus COGS-missing alerts when cost is unavailable

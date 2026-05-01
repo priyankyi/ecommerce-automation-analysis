@@ -79,6 +79,19 @@ Phase 27 - Streamlit UX Cleanup + Order Item Explorer
 - Latest Stage 7 issue distribution: `Other=270`, `Logistics / Courier=46`, `Product Not Working=38`, `Damaged Product=26`, `Quality Issue=19`, `Wrong Product=9`, `Customer Refused / RTO=7`, `Size / Expectation Mismatch=5`, `Return Fraud / Suspicious=1`
 - Latest Stage 7 tabs created: `FLIPKART_RETURN_COMMENTS`, `FLIPKART_RETURN_ISSUE_SUMMARY`, `FLIPKART_RETURN_REASON_PIVOT`
 - Latest Stage 7 local outputs: `flipkart_return_comments.csv`, `flipkart_return_issue_summary.csv`, `flipkart_return_reason_pivot.csv`
+- Return Intelligence v2 is the next requested phase
+- Existing return intelligence must be split into `customer_return` and `courier_return`
+- `customer_return` is the product/customer dissatisfaction signal and must drive product return percentage, product-quality alerts, and ads-risk decisions
+- `courier_return` is the logistics/RTO/cancellation signal and must be tracked separately for courier intelligence and operational follow-up
+- All return comments remain visible, but customer and courier comments must be shown separately in Streamlit
+- New decision-source tabs should be `FLIPKART_RETURN_ALL_DETAILS`, `FLIPKART_CUSTOMER_RETURN_COMMENTS`, `FLIPKART_COURIER_RETURN_COMMENTS`, `FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY`, `FLIPKART_COURIER_RETURN_SUMMARY`, and `FLIPKART_RETURN_TYPE_PIVOT`
+- New Looker/Streamlit source tabs should be `LOOKER_FLIPKART_RETURN_ALL_DETAILS`, `LOOKER_FLIPKART_CUSTOMER_RETURNS`, `LOOKER_FLIPKART_COURIER_RETURNS`, and `LOOKER_FLIPKART_RETURN_TYPE_PIVOT`
+- Streamlit pages to update are `Returns Intelligence`, `Return Comments Explorer`, `FSN Deep Dive`, and `Order ID Explorer`
+- Order_ID and Order_Item_ID must stay visible and copy-friendly for return checks
+- Existing return tabs can remain for backward compatibility, but the v2 tabs are the decision source
+- Total return rate remains informational only
+- `customer_return rows > 0`, `courier_return rows > 0`, and `customer + courier + unknown = total return rows` are the success checks for the new phase
+- Product-quality ads blocking should use customer returns only; courier returns should not directly make the product look bad
 - `src/marketplaces/flipkart/create_flipkart_ads_planner_foundation.py` added
 - `src/marketplaces/flipkart/verify_flipkart_ads_planner_foundation.py` added
 - `FLIPKART_PRODUCT_AD_PROFILE`, `GOOGLE_ADS_KEYWORD_SEEDS`, `GOOGLE_KEYWORD_METRICS_CACHE`, `PRODUCT_TYPE_DEMAND_PROFILE`, and `FLIPKART_ADS_PLANNER` support added
@@ -255,6 +268,37 @@ Make monthly Flipkart raw report replacement noob-proof by keeping the active ra
 - Dashboard pages in scope: `Executive Overview`, `Alerts & Actions`, `Profit & COGS`, `Ads Planner`, `Competitor Risk`, `Data Quality`, `Returns Intelligence`, `Return Comments Explorer`, `Order ID Explorer`, `FSN Deep Dive`, `Listing Issues`, `Run History & Comparison`, and `Raw Data Explorer / Downloads`
 - Dashboard is read-only against Google Sheets generated/source tabs and never writes back from Streamlit
 - Dashboard reads dashboard source tabs only and must not depend on local credentials/folders in hosted mode
+
+## Phase 29 - Return Intelligence v2 parsing + dedupe repair
+
+### Goal
+Fix Return Intelligence v2 so it correctly extracts Order_ID and Order_Item_ID, deduplicates overlapping rows across `Returns Report.csv` and `Returns.xlsx`, and classifies return rows into `customer_return`, `courier_return`, and `unknown_return` with a much lower unknown rate.
+
+### Latest Validation Result
+- `create_flipkart_return_intelligence_v2` status is `SUCCESS`
+- `raw_return_rows=7929`
+- `deduped_return_rows=4139`
+- `duplicate_return_rows_removed=3790`
+- `detail_rows=4139`
+- `customer_return_rows=1349`
+- `courier_return_rows=1817`
+- `unknown_return_rows=973`
+- `customer_summary_rows=358`
+- `courier_summary_rows=459`
+- `return_type_pivot_rows=691`
+- `source_counts`: `Returns Report.csv=3879`, `Returns.xlsx=4050`
+
+### Verification Result
+- `verify_flipkart_return_intelligence_v2` status is `PASS_WITH_WARNINGS`
+- `order_id_present_count=3879`
+- `order_item_id_present_count=4139`
+- `customer_return_rows>0`, `courier_return_rows>0`, and bucket totals match the detail rows
+- The unknown return bucket is still present but materially reduced and now warning-level only
+
+### Result
+- Return Intelligence v2 parsing, deduplication, and quick-refresh recovery are complete and verified
+- The order item explorer now consumes `FLIPKART_RETURN_ALL_DETAILS`, `FLIPKART_CUSTOMER_RETURN_COMMENTS`, `FLIPKART_COURIER_RETURN_COMMENTS`, and `FLIPKART_RETURN_TYPE_PIVOT`
+- Quick refresh now completes with warnings only and no failing step
 - App must support Streamlit Cloud secrets while still working locally
 - Keep warnings visible only for spreadsheet disconnects, missing tabs, and quota issues in the production sidebar; hide auth internals unless `DASHBOARD_DEBUG=true`
 - Streamlit UX cleanup plus order-item explorer support is complete and verified; the dashboard remains read-only, Flipkart-only, and source-driven

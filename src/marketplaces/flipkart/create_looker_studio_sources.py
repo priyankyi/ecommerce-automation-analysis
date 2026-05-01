@@ -39,6 +39,12 @@ SOURCE_TABS = [
     "FLIPKART_ACTION_TRACKER",
     "FLIPKART_ADS_PLANNER",
     "FLIPKART_RETURN_ISSUE_SUMMARY",
+    "FLIPKART_RETURN_ALL_DETAILS",
+    "FLIPKART_CUSTOMER_RETURN_COMMENTS",
+    "FLIPKART_COURIER_RETURN_COMMENTS",
+    "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY",
+    "FLIPKART_COURIER_RETURN_SUMMARY",
+    "FLIPKART_RETURN_TYPE_PIVOT",
     "FLIPKART_LISTING_PRESENCE",
     "FLIPKART_MISSING_ACTIVE_LISTINGS",
     "FLIPKART_RUN_HISTORY",
@@ -67,6 +73,10 @@ LOOKER_ALERTS_TAB = "LOOKER_FLIPKART_ALERTS"
 LOOKER_ACTIONS_TAB = "LOOKER_FLIPKART_ACTIONS"
 LOOKER_ADS_TAB = "LOOKER_FLIPKART_ADS"
 LOOKER_RETURNS_TAB = "LOOKER_FLIPKART_RETURNS"
+LOOKER_RETURN_ALL_DETAILS_TAB = "LOOKER_FLIPKART_RETURN_ALL_DETAILS"
+LOOKER_CUSTOMER_RETURNS_TAB = "LOOKER_FLIPKART_CUSTOMER_RETURNS"
+LOOKER_COURIER_RETURNS_TAB = "LOOKER_FLIPKART_COURIER_RETURNS"
+LOOKER_RETURN_TYPE_PIVOT_TAB = "LOOKER_FLIPKART_RETURN_TYPE_PIVOT"
 LOOKER_LISTINGS_TAB = "LOOKER_FLIPKART_LISTINGS"
 LOOKER_ORDER_ITEM_EXPLORER_TAB = "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"
 LOOKER_ADJUSTED_PROFIT_TAB = "LOOKER_FLIPKART_ADJUSTED_PROFIT"
@@ -84,6 +94,10 @@ LOOKER_TABS = [
     LOOKER_ACTIONS_TAB,
     LOOKER_ADS_TAB,
     LOOKER_RETURNS_TAB,
+    LOOKER_RETURN_ALL_DETAILS_TAB,
+    LOOKER_CUSTOMER_RETURNS_TAB,
+    LOOKER_COURIER_RETURNS_TAB,
+    LOOKER_RETURN_TYPE_PIVOT_TAB,
     LOOKER_LISTINGS_TAB,
     LOOKER_ORDER_ITEM_EXPLORER_TAB,
     LOOKER_RUN_COMPARISON_TAB,
@@ -201,6 +215,83 @@ LOOKER_HEADERS = {
         "Customer_RTO_Count",
         "Suggested_Return_Action",
         "Return_Action_Priority",
+        "Last_Updated",
+    ],
+    LOOKER_RETURN_ALL_DETAILS_TAB: [
+        "Run_ID",
+        "Return_ID",
+        "Order_ID",
+        "Order_Item_ID",
+        "Return_Type",
+        "Return_Bucket",
+        "SKU_ID",
+        "FSN",
+        "Product_Title",
+        "Return_Status",
+        "Return_Result",
+        "Return_Reason",
+        "Return_Sub_Reason",
+        "Comments",
+        "Tracking_ID",
+        "Reverse_Logistics_Tracking_ID",
+        "Return_Requested_Date",
+        "Return_Approval_Date",
+        "Return_Completion_Date",
+        "Quantity",
+        "Source_File",
+        "Last_Updated",
+    ],
+    LOOKER_CUSTOMER_RETURNS_TAB: [
+        "Run_ID",
+        "Return_ID",
+        "Order_ID",
+        "Order_Item_ID",
+        "FSN",
+        "SKU_ID",
+        "Product_Title",
+        "Return_Reason",
+        "Return_Sub_Reason",
+        "Comments",
+        "Customer_Issue_Category",
+        "Customer_Issue_Severity",
+        "Priority",
+        "Suggested_Action",
+        "Source_File",
+        "Last_Updated",
+    ],
+    LOOKER_COURIER_RETURNS_TAB: [
+        "Run_ID",
+        "Return_ID",
+        "Order_ID",
+        "Order_Item_ID",
+        "FSN",
+        "SKU_ID",
+        "Product_Title",
+        "Return_Reason",
+        "Return_Sub_Reason",
+        "Comments",
+        "Courier_Issue_Category",
+        "Courier_Issue_Severity",
+        "Priority",
+        "Suggested_Action",
+        "Source_File",
+        "Last_Updated",
+    ],
+    LOOKER_RETURN_TYPE_PIVOT_TAB: [
+        "Run_ID",
+        "FSN",
+        "SKU_ID",
+        "Product_Title",
+        "Sold_Order_Items",
+        "Customer_Return_Count",
+        "Courier_Return_Count",
+        "Unknown_Return_Count",
+        "Total_Return_Count",
+        "Customer_Return_Rate",
+        "Courier_Return_Rate",
+        "Total_Return_Rate",
+        "Customer_vs_Courier_Mix",
+        "Dominant_Return_Type",
         "Last_Updated",
     ],
     LOOKER_LISTINGS_TAB: [
@@ -1155,6 +1246,12 @@ def create_looker_studio_sources() -> Dict[str, Any]:
         tracker_headers, tracker_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ACTION_TRACKER")
         ads_headers, ads_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ADS_PLANNER")
         return_headers, return_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_RETURN_ISSUE_SUMMARY")
+        return_all_details_headers, return_all_details_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_RETURN_ALL_DETAILS")
+        customer_return_headers, customer_return_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_CUSTOMER_RETURN_COMMENTS")
+        courier_return_headers, courier_return_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_COURIER_RETURN_COMMENTS")
+        customer_issue_headers, customer_issue_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY")
+        courier_issue_headers, courier_issue_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_COURIER_RETURN_SUMMARY")
+        return_type_pivot_headers, return_type_pivot_rows = read_optional_table(sheets_service, spreadsheet_id, "FLIPKART_RETURN_TYPE_PIVOT")
         listing_headers, listing_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_LISTING_PRESENCE")
         missing_listing_headers, missing_listing_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_MISSING_ACTIVE_LISTINGS")
         run_history_headers, run_history_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_RUN_HISTORY")
@@ -1226,6 +1323,12 @@ def create_looker_studio_sources() -> Dict[str, Any]:
         action_rows = build_action_rows(tracker_rows)
         ads_source_rows = build_ads_rows(ads_rows)
         return_source_rows = build_returns_rows(return_rows)
+        return_all_details_source_rows = _copy_rows(return_all_details_rows)
+        customer_return_source_rows = _copy_rows(customer_return_rows)
+        courier_return_source_rows = _copy_rows(courier_return_rows)
+        customer_issue_source_rows = _copy_rows(customer_issue_rows)
+        courier_issue_source_rows = _copy_rows(courier_issue_rows)
+        return_type_pivot_source_rows = _copy_rows(return_type_pivot_rows)
         listing_source_rows = build_listings_rows(listing_rows, missing_listing_rows)
         adjusted_profit_headers, adjusted_profit_rows, _ = build_copy_rows(
             "FLIPKART_ADJUSTED_PROFIT",
@@ -1280,6 +1383,10 @@ def create_looker_studio_sources() -> Dict[str, Any]:
             LOOKER_ACTIONS_TAB: action_rows,
             LOOKER_ADS_TAB: ads_source_rows,
             LOOKER_RETURNS_TAB: return_source_rows,
+            LOOKER_RETURN_ALL_DETAILS_TAB: return_all_details_source_rows,
+            LOOKER_CUSTOMER_RETURNS_TAB: customer_return_source_rows,
+            LOOKER_COURIER_RETURNS_TAB: courier_return_source_rows,
+            LOOKER_RETURN_TYPE_PIVOT_TAB: return_type_pivot_source_rows,
             LOOKER_LISTINGS_TAB: listing_source_rows,
         }
 

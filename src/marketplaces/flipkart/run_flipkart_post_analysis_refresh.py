@@ -29,6 +29,14 @@ IN_PROCESS_STEPS = {"create_looker_studio_sources"}
 STEP_TAB_MAP: Dict[str, List[str]] = {
     "update_flipkart_profit_after_cogs": ["FLIPKART_SKU_ANALYSIS"],
     "create_flipkart_return_comments_analysis": ["FLIPKART_RETURN_COMMENTS", "FLIPKART_RETURN_ISSUE_SUMMARY", "FLIPKART_RETURN_REASON_PIVOT"],
+    "create_flipkart_return_intelligence_v2": [
+        "FLIPKART_RETURN_ALL_DETAILS",
+        "FLIPKART_CUSTOMER_RETURN_COMMENTS",
+        "FLIPKART_COURIER_RETURN_COMMENTS",
+        "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY",
+        "FLIPKART_COURIER_RETURN_SUMMARY",
+        "FLIPKART_RETURN_TYPE_PIVOT",
+    ],
     "create_flipkart_ads_planner_foundation": ["FLIPKART_PRODUCT_AD_PROFILE", "GOOGLE_ADS_KEYWORD_SEEDS", "GOOGLE_KEYWORD_METRICS_CACHE", "PRODUCT_TYPE_DEMAND_PROFILE", "FLIPKART_ADS_PLANNER"],
     "create_flipkart_ads_mapping": ["FLIPKART_ADS_MASTER", "FLIPKART_ADS_MAPPING_ISSUES", "FLIPKART_ADS_SUMMARY_BY_FSN", "FLIPKART_ADS_PLANNER"],
     "update_flipkart_ads_recommendations": ["FLIPKART_ADS_PLANNER"],
@@ -69,6 +77,7 @@ STEP_TAB_MAP: Dict[str, List[str]] = {
 STEP_MODULES: Dict[str, str] = {
     "update_flipkart_profit_after_cogs": "src.marketplaces.flipkart.update_flipkart_profit_after_cogs",
     "create_flipkart_return_comments_analysis": "src.marketplaces.flipkart.create_flipkart_return_comments_analysis",
+    "create_flipkart_return_intelligence_v2": "src.marketplaces.flipkart.create_flipkart_return_intelligence_v2",
     "create_flipkart_ads_planner_foundation": "src.marketplaces.flipkart.create_flipkart_ads_planner_foundation",
     "create_flipkart_ads_mapping": "src.marketplaces.flipkart.create_flipkart_ads_mapping",
     "update_flipkart_ads_recommendations": "src.marketplaces.flipkart.update_flipkart_ads_recommendations",
@@ -111,6 +120,7 @@ HEALTH_CHECK_MODULE = "src.marketplaces.flipkart.verify_flipkart_system_health"
 STEP_ORDER: List[str] = [
     "update_flipkart_profit_after_cogs",
     "create_flipkart_return_comments_analysis",
+    "create_flipkart_return_intelligence_v2",
     "create_flipkart_ads_planner_foundation",
     "create_flipkart_ads_mapping",
     "update_flipkart_ads_recommendations",
@@ -132,6 +142,8 @@ STEP_ORDER: List[str] = [
 
 MODE_STEP_ORDER: Dict[str, List[str]] = {
     "quick": [
+        "create_flipkart_return_comments_analysis",
+        "create_flipkart_return_intelligence_v2",
         "update_product_type_demand_profile",
         "create_flipkart_competitor_price_intelligence",
         "create_flipkart_order_item_explorer",

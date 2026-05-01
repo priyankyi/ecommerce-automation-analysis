@@ -47,6 +47,7 @@ LOCAL_ORDER_ITEM_PATH = OUTPUT_DIR / "flipkart_order_item_explorer.csv"
 LOCAL_LOOKER_PATH = OUTPUT_DIR / "looker_flipkart_order_item_explorer.csv"
 ORDER_ITEM_TAB = "FLIPKART_ORDER_ITEM_EXPLORER"
 LOOKER_ORDER_ITEM_TAB = "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"
+RETURN_TYPE_PIVOT_TAB = "FLIPKART_RETURN_TYPE_PIVOT"
 
 LOCAL_CSV_SOURCES: Dict[str, Path] = {
     "orders": NORMALIZED_ORDERS_PATH,
@@ -56,6 +57,10 @@ LOCAL_CSV_SOURCES: Dict[str, Path] = {
     "sku_analysis": SKU_ANALYSIS_PATH,
     "adjusted_profit": OUTPUT_DIR / "flipkart_adjusted_profit.csv",
     "return_comments": OUTPUT_DIR / "flipkart_return_comments.csv",
+    "return_all_details": OUTPUT_DIR / "flipkart_return_all_details.csv",
+    "customer_return_comments": OUTPUT_DIR / "flipkart_customer_return_comments.csv",
+    "courier_return_comments": OUTPUT_DIR / "flipkart_courier_return_comments.csv",
+    "return_type_pivot": OUTPUT_DIR / "flipkart_return_type_pivot.csv",
     "ads_recommendations": OUTPUT_DIR / "flipkart_ads_final_recommendations.csv",
     "ads_planner": OUTPUT_DIR / "flipkart_ads_planner.csv",
     "competitor_price": OUTPUT_DIR / "flipkart_competitor_price_intelligence.csv",
@@ -66,6 +71,10 @@ SHEET_FALLBACK_TABS = {
     "sku_analysis": "FLIPKART_SKU_ANALYSIS",
     "adjusted_profit": "FLIPKART_ADJUSTED_PROFIT",
     "return_comments": "FLIPKART_RETURN_COMMENTS",
+    "return_all_details": "FLIPKART_RETURN_ALL_DETAILS",
+    "customer_return_comments": "FLIPKART_CUSTOMER_RETURN_COMMENTS",
+    "courier_return_comments": "FLIPKART_COURIER_RETURN_COMMENTS",
+    "return_type_pivot": RETURN_TYPE_PIVOT_TAB,
     "ads_planner": "FLIPKART_ADS_PLANNER",
 }
 
@@ -93,9 +102,16 @@ OUTPUT_HEADERS = [
     "Return_Status",
     "Return_ID",
     "Return_Date",
+    "Return_Type",
     "Return_Reason",
     "Return_Sub_Reason",
     "Return_Issue_Category",
+    "Customer_Return_YN",
+    "Courier_Return_YN",
+    "Customer_Issue_Category",
+    "Courier_Issue_Category",
+    "Customer_Return_Risk_Level",
+    "Courier_Return_Risk_Level",
     "Alert_Count",
     "Critical_Alert_Count",
     "Final_Ads_Decision",
@@ -155,6 +171,10 @@ def text_value(value: Any) -> str:
     return str(value).strip() if value is not None else ""
 
 
+def normalize_text(value: Any) -> str:
+    return text_value(value)
+
+
 def format_number_text(value: Any, decimals: int = 2) -> str:
     text = text_value(value)
     if not text:
@@ -189,10 +209,13 @@ def add_source(record: Dict[str, Any], source_text: str) -> None:
 
 
 def row_key(row: Dict[str, Any], source_name: str, index: int) -> str:
+    return_id = text_value(row.get("Return_ID", ""))
     order_item_id = text_value(row.get("Order_Item_ID", ""))
     order_id = text_value(row.get("Order_ID", ""))
     fsn = clean_fsn(row.get("FSN", ""))
     sku = text_value(row.get("SKU_ID", "")) or text_value(row.get("Seller_SKU", ""))
+    if return_id:
+        return f"RETURN::{return_id}"
     if order_item_id:
         return f"ORDER_ITEM::{order_item_id}"
     composite = [part for part in [order_id, fsn, sku] if part]
@@ -237,6 +260,51 @@ def merge_return_row(record: Dict[str, Any], row: Dict[str, Any], source_name: s
     set_first(record, "Return_Reason", row.get("Return_Reason", ""))
     set_first(record, "Return_Sub_Reason", row.get("Return_Sub_Reason", ""))
     set_first(record, "Return_Issue_Category", row.get("Issue_Category", ""))
+    return_type = infer_return_type(row)
+    set_first(record, "Return_Type", return_type)
+    set_first(record, "Customer_Return_YN", "Yes" if return_type == "customer_return" else "No")
+    set_first(record, "Courier_Return_YN", "Yes" if return_type == "courier_return" else "No")
+    customer_category = normalize_text(row.get("Customer_Issue_Category", "")) or infer_customer_issue_category(row)
+    courier_category = normalize_text(row.get("Courier_Issue_Category", "")) or infer_courier_issue_category(row)
+    if return_type != "customer_return":
+        customer_category = normalize_text(row.get("Customer_Issue_Category", ""))
+    if return_type != "courier_return":
+        courier_category = normalize_text(row.get("Courier_Issue_Category", ""))
+    set_first(record, "Customer_Issue_Category", customer_category)
+    set_first(record, "Courier_Issue_Category", courier_category)
+    set_first(record, "Customer_Return_Risk_Level", normalize_text(row.get("Customer_Return_Risk_Level", "")) or infer_customer_risk(customer_category))
+    set_first(record, "Courier_Return_Risk_Level", normalize_text(row.get("Courier_Return_Risk_Level", "")) or infer_courier_risk(courier_category))
+
+
+def merge_return_type_pivot_row(record: Dict[str, Any], row: Dict[str, Any], source_name: str) -> None:
+    source_file = text_value(row.get("Source_File", "")) or source_name
+    add_source(record, source_file)
+    set_first(record, "FSN", clean_fsn(row.get("FSN", "")))
+    set_first(record, "SKU_ID", row.get("SKU_ID", ""))
+    set_first(record, "Product_Title", row.get("Product_Title", ""))
+    customer_count = text_value(row.get("Customer_Return_Count", ""))
+    courier_count = text_value(row.get("Courier_Return_Count", ""))
+    unknown_count = text_value(row.get("Unknown_Return_Count", ""))
+    dominant_type = normalize_text(row.get("Dominant_Return_Type", ""))
+    total_count = text_value(row.get("Total_Return_Count", ""))
+    if dominant_type:
+        set_first(record, "Return_Type", dominant_type)
+    if customer_count and customer_count != "0":
+        set_first(record, "Customer_Return_YN", "Yes")
+    if courier_count and courier_count != "0":
+        set_first(record, "Courier_Return_YN", "Yes")
+    if dominant_type == "customer_return":
+        set_first(record, "Customer_Return_YN", "Yes")
+    elif dominant_type == "courier_return":
+        set_first(record, "Courier_Return_YN", "Yes")
+    if total_count and total_count != "0":
+        set_first(record, "Return_Issue_Category", f"Pivot total {total_count}")
+    if customer_count and not text_value(record.get("Customer_Issue_Category", "")):
+        set_first(record, "Customer_Issue_Category", "Customer Returns Present")
+    if courier_count and not text_value(record.get("Courier_Issue_Category", "")):
+        set_first(record, "Courier_Issue_Category", "Courier Returns Present")
+    if unknown_count and not text_value(record.get("Return_Status", "")):
+        set_first(record, "Return_Status", "Unknown Return Types Present")
 
 
 def merge_settlement_row(record: Dict[str, Any], row: Dict[str, Any], source_name: str) -> None:
@@ -282,6 +350,85 @@ def merge_pnl_row(record: Dict[str, Any], row: Dict[str, Any], source_name: str)
     set_first(record, "Net_Profit", row.get("Flipkart_Net_Earnings", ""))
     if not text_value(record.get("Net_Profit", "")):
         set_first(record, "Net_Profit", row.get("Amount_Pending", ""))
+
+
+def infer_return_type(row: Dict[str, Any]) -> str:
+    return_type = normalize_text(row.get("Return_Type", "")).lower()
+    if "customer" in return_type:
+        return "customer_return"
+    if any(token in return_type for token in ("courier", "logistics", "rto", "cancel")):
+        return "courier_return"
+    haystack = " ".join(
+        normalize_text(row.get(field, "")).lower()
+        for field in ["Return_Reason", "Return_Sub_Reason", "Comments", "Issue_Category", "Return_Status", "Return_Result"]
+    )
+    if any(token in haystack for token in ("defect", "damag", "wrong", "quality", "as described", "remorse", "missing item", "missing accessory", "faulty", "broken", "not working")):
+        return "customer_return"
+    if any(token in haystack for token in ("courier", "logistics", "shipment ageing", "attempts exhausted", "not serviceable", "orc", "delivery failed", "rto", "cancel")):
+        return "courier_return"
+    return "unknown_return"
+
+
+def infer_customer_issue_category(row: Dict[str, Any]) -> str:
+    haystack = " ".join(
+        normalize_text(row.get(field, "")).lower()
+        for field in ["Return_Reason", "Return_Sub_Reason", "Comments", "Issue_Category", "Return_Status", "Return_Result"]
+    )
+    if any(token in haystack for token in ("defect", "defective", "faulty", "broken", "not working", "dead", "malfunction")):
+        return "Defective Product"
+    if any(token in haystack for token in ("damag", "crack", "dent", "broken in transit")):
+        return "Damaged Product"
+    if any(token in haystack for token in ("missing item", "missing accessory", "missing part", "incomplete")):
+        return "Missing Item / Accessory"
+    if any(token in haystack for token in ("wrong product", "incorrect", "mismatch", "different product", "wrong item")):
+        return "Wrong Product"
+    if any(token in haystack for token in ("quality", "poor quality", "bad quality", "low quality", "build quality")):
+        return "Quality Issue"
+    if any(token in haystack for token in ("as described", "description", "photos", "expectation", "not as described")):
+        return "Not As Described"
+    if any(token in haystack for token in ("remorse", "changed mind", "unwanted", "not required", "mistake")):
+        return "Customer Remorse"
+    return "Other Customer Return"
+
+
+def infer_courier_issue_category(row: Dict[str, Any]) -> str:
+    haystack = " ".join(
+        normalize_text(row.get(field, "")).lower()
+        for field in ["Return_Reason", "Return_Sub_Reason", "Comments", "Issue_Category", "Return_Status", "Return_Result"]
+    )
+    if any(token in haystack for token in ("cancel", "order cancelled", "customer cancelled")):
+        return "Order Cancelled"
+    if any(token in haystack for token in ("rto", "return to origin", "courier return", "reverse logistics")):
+        return "RTO / Courier Return"
+    if any(token in haystack for token in ("attempts exhausted", "multiple attempts", "attempts")):
+        return "Attempts Exhausted"
+    if any(token in haystack for token in ("shipment ageing", "ageing", "delayed")):
+        return "Shipment Ageing"
+    if any(token in haystack for token in ("not serviceable", "non serviceable", "serviceability")):
+        return "Not Serviceable"
+    if any(token in haystack for token in ("orc", "validated with customer", "orc validated")):
+        return "ORC Validated With Customer"
+    if any(token in haystack for token in ("delivery failed", "undelivered", "failed delivery")):
+        return "Delivery Failed"
+    return "Other Courier Return"
+
+
+def infer_customer_risk(category: str) -> str:
+    if category in {"Defective Product", "Damaged Product", "Wrong Product"}:
+        return "Critical"
+    if category in {"Missing Item / Accessory", "Quality Issue", "Not As Described"}:
+        return "High"
+    if category == "Customer Remorse":
+        return "Medium"
+    return "Low"
+
+
+def infer_courier_risk(category: str) -> str:
+    if category in {"Order Cancelled", "RTO / Courier Return", "Attempts Exhausted", "Not Serviceable", "ORC Validated With Customer", "Delivery Failed"}:
+        return "High"
+    if category == "Shipment Ageing":
+        return "Medium"
+    return "Low"
 
 
 def merge_alert_counts(record: Dict[str, Any], alert_counts: Dict[str, Dict[str, int]]) -> None:
@@ -387,6 +534,14 @@ def load_source_data(sheets_service: object, spreadsheet_id: str) -> Dict[str, A
     for key, path in LOCAL_CSV_SOURCES.items():
         frames[key] = load_csv_table(path)
 
+    if frames["return_all_details"].empty:
+        frames["return_all_details"] = load_sheet_table_if_available(sheets_service, spreadsheet_id, SHEET_FALLBACK_TABS["return_all_details"])
+    if frames["customer_return_comments"].empty:
+        frames["customer_return_comments"] = load_sheet_table_if_available(sheets_service, spreadsheet_id, SHEET_FALLBACK_TABS["customer_return_comments"])
+    if frames["courier_return_comments"].empty:
+        frames["courier_return_comments"] = load_sheet_table_if_available(sheets_service, spreadsheet_id, SHEET_FALLBACK_TABS["courier_return_comments"])
+    if frames["return_type_pivot"].empty:
+        frames["return_type_pivot"] = load_sheet_table_if_available(sheets_service, spreadsheet_id, SHEET_FALLBACK_TABS["return_type_pivot"])
     if frames["return_comments"].empty:
         frames["return_comments"] = load_sheet_table_if_available(sheets_service, spreadsheet_id, SHEET_FALLBACK_TABS["return_comments"])
     if frames["sku_analysis"].empty:
@@ -410,6 +565,10 @@ def build_order_item_explorer_rows(source: Dict[str, Any]) -> tuple[List[Dict[st
     alert_rows: List[Dict[str, Any]] = source["alert_rows"]
     run_id = load_latest_run_id(
         [
+            frames.get("return_all_details", pd.DataFrame()),
+            frames.get("customer_return_comments", pd.DataFrame()),
+            frames.get("courier_return_comments", pd.DataFrame()),
+            frames.get("return_type_pivot", pd.DataFrame()),
             frames.get("return_comments", pd.DataFrame()),
             frames.get("adjusted_profit", pd.DataFrame()),
             frames.get("sku_analysis", pd.DataFrame()),
@@ -435,6 +594,10 @@ def build_order_item_explorer_rows(source: Dict[str, Any]) -> tuple[List[Dict[st
     ingest_rows(frames.get("settlements", pd.DataFrame()).fillna("").to_dict(orient="records"), "Settled Transactions.xlsx", merge_settlement_row)
     ingest_rows(frames.get("pnl", pd.DataFrame()).fillna("").to_dict(orient="records"), "PNL.xlsx", merge_pnl_row)
     ingest_rows(frames.get("return_comments", pd.DataFrame()).fillna("").to_dict(orient="records"), "Returns Report.csv", merge_return_row)
+    ingest_rows(frames.get("return_all_details", pd.DataFrame()).fillna("").to_dict(orient="records"), "flipkart_return_all_details.csv", merge_return_row)
+    ingest_rows(frames.get("customer_return_comments", pd.DataFrame()).fillna("").to_dict(orient="records"), "flipkart_customer_return_comments.csv", merge_return_row)
+    ingest_rows(frames.get("courier_return_comments", pd.DataFrame()).fillna("").to_dict(orient="records"), "flipkart_courier_return_comments.csv", merge_return_row)
+    ingest_rows(frames.get("return_type_pivot", pd.DataFrame()).fillna("").to_dict(orient="records"), "flipkart_return_type_pivot.csv", merge_return_type_pivot_row)
 
     sku_frame = frames.get("sku_analysis", pd.DataFrame())
     if not sku_frame.empty and "FSN" in sku_frame.columns:

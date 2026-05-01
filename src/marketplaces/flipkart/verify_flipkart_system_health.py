@@ -26,6 +26,12 @@ TABS_TO_CHECK = [
     "FLIPKART_FSN_DRILLDOWN",
     "FLIPKART_RETURN_COMMENTS",
     "FLIPKART_RETURN_ISSUE_SUMMARY",
+    "FLIPKART_RETURN_ALL_DETAILS",
+    "FLIPKART_CUSTOMER_RETURN_COMMENTS",
+    "FLIPKART_COURIER_RETURN_COMMENTS",
+    "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY",
+    "FLIPKART_COURIER_RETURN_SUMMARY",
+    "FLIPKART_RETURN_TYPE_PIVOT",
     "FLIPKART_ADS_PLANNER",
     "FLIPKART_ADS_MASTER",
     "FLIPKART_LISTING_PRESENCE",
@@ -191,6 +197,12 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     missing_listing_rows = tables["FLIPKART_MISSING_ACTIVE_LISTINGS"][1]
     order_item_rows = tables["FLIPKART_ORDER_ITEM_EXPLORER"][1]
     return_issue_rows = tables["FLIPKART_RETURN_ISSUE_SUMMARY"][1]
+    return_all_details_rows = tables["FLIPKART_RETURN_ALL_DETAILS"][1]
+    customer_return_rows = tables["FLIPKART_CUSTOMER_RETURN_COMMENTS"][1]
+    courier_return_rows = tables["FLIPKART_COURIER_RETURN_COMMENTS"][1]
+    customer_summary_rows = tables["FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY"][1]
+    courier_summary_rows = tables["FLIPKART_COURIER_RETURN_SUMMARY"][1]
+    return_type_pivot_rows = tables["FLIPKART_RETURN_TYPE_PIVOT"][1]
     run_comparison_rows = tables["FLIPKART_RUN_COMPARISON"][1]
     adjusted_profit_rows = tables["FLIPKART_ADJUSTED_PROFIT"][1]
     report_format_monitor_rows = tables["FLIPKART_REPORT_FORMAT_MONITOR"][1]
@@ -219,6 +231,11 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     competitor_not_enough_data_count = sum(1 for row in competitor_price_rows if normalize_text(row.get("Competition_Risk_Level", "")) == "Not Enough Data")
     report_format_critical_issue_count = sum(1 for row in report_format_issue_rows if normalize_text(row.get("Severity", "")) == "Critical")
     low_confidence_count = sum(1 for row in module_confidence_rows if normalize_text(row.get("Overall_Confidence_Status", "")) == "LOW")
+    customer_return_count = sum(1 for row in return_all_details_rows if normalize_text(row.get("Return_Bucket", "")) == "customer_return")
+    courier_return_count = sum(1 for row in return_all_details_rows if normalize_text(row.get("Return_Bucket", "")) == "courier_return")
+    unknown_return_count = sum(1 for row in return_all_details_rows if normalize_text(row.get("Return_Bucket", "")) == "unknown_return")
+    critical_customer_return_fsn_count = sum(1 for row in customer_summary_rows if normalize_text(row.get("Customer_Return_Risk_Level", "")) == "Critical")
+    high_courier_return_fsn_count = sum(1 for row in courier_summary_rows if normalize_text(row.get("Courier_Return_Risk_Level", "")) == "High")
 
     warnings: List[str] = []
     if keyword_cache_total_count == 0:
@@ -255,13 +272,24 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         "missing_active_listings": row_count(missing_listing_rows),
         "ads_ready_count": count_ads_ready(ads_planner_rows),
         "return_issue_summary_rows": row_count(return_issue_rows),
+        "return_all_details_rows": row_count(return_all_details_rows),
+        "customer_return_rows": row_count(customer_return_rows),
+        "courier_return_rows": row_count(courier_return_rows),
+        "customer_return_summary_rows": row_count(customer_summary_rows),
+        "courier_return_summary_rows": row_count(courier_summary_rows),
+        "return_type_pivot_rows": row_count(return_type_pivot_rows),
         "run_quality_score": run_quality_score_value,
         "low_confidence_count": low_confidence_count,
         "critical_competition_risk_count": competitor_critical_risk_count,
         "medium_competition_risk_count": competitor_medium_risk_count,
         "keyword_cache_pending_count": keyword_cache_pending_count,
         "report_format_critical_issue_count": report_format_critical_issue_count,
+        "critical_customer_return_fsn_count": critical_customer_return_fsn_count,
+        "high_courier_return_fsn_count": high_courier_return_fsn_count,
     }
+
+    customer_only_rows = row_count(customer_return_rows)
+    courier_only_rows = row_count(courier_return_rows)
 
     checks = {
         "all_required_tabs_present": not [tab_name for tab_name in missing_tabs if tab_name not in {"FLIPKART_ORDER_ITEM_EXPLORER", "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"}],
@@ -274,6 +302,12 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         "fsn_drilldown_has_rows": row_counts["FLIPKART_FSN_DRILLDOWN"] > 0,
         "return_comments_has_rows": row_counts["FLIPKART_RETURN_COMMENTS"] > 0,
         "return_issue_summary_has_rows": row_counts["FLIPKART_RETURN_ISSUE_SUMMARY"] > 0,
+        "return_all_details_has_rows": row_counts["FLIPKART_RETURN_ALL_DETAILS"] > 0,
+        "customer_return_comments_has_rows": row_counts["FLIPKART_CUSTOMER_RETURN_COMMENTS"] > 0,
+        "courier_return_comments_has_rows": row_counts["FLIPKART_COURIER_RETURN_COMMENTS"] > 0,
+        "customer_return_summary_has_rows": row_counts["FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY"] > 0,
+        "courier_return_summary_has_rows": row_counts["FLIPKART_COURIER_RETURN_SUMMARY"] > 0,
+        "return_type_pivot_has_rows": row_counts["FLIPKART_RETURN_TYPE_PIVOT"] > 0,
         "ads_planner_has_rows": row_counts["FLIPKART_ADS_PLANNER"] > 0,
         "ads_master_has_rows": row_counts["FLIPKART_ADS_MASTER"] > 0,
         "listing_presence_has_rows": row_counts["FLIPKART_LISTING_PRESENCE"] > 0,
@@ -297,6 +331,8 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         "adjustments_ledger_tab_exists": "FLIPKART_ADJUSTMENTS_LEDGER" not in missing_tabs,
         "order_item_explorer_has_rows": ("FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs) or row_counts["FLIPKART_ORDER_ITEM_EXPLORER"] > 0,
         "looker_order_item_explorer_has_rows": ("LOOKER_FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs) or row_counts["LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"] > 0,
+        "customer_return_rate_source_is_customer_only": customer_only_rows == row_counts["FLIPKART_CUSTOMER_RETURN_COMMENTS"],
+        "courier_return_rate_source_is_courier_only": courier_only_rows == row_counts["FLIPKART_COURIER_RETURN_COMMENTS"],
     }
 
     required_missing_tabs = [tab_name for tab_name in missing_tabs if tab_name not in {"FLIPKART_ORDER_ITEM_EXPLORER", "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"}]

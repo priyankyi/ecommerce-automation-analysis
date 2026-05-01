@@ -11,7 +11,7 @@ It can:
 - Build SKU and FSN analysis
 - Calculate profit after COGS
 - Find missing COGS
-- Find high return products
+- Find customer return products and courier return issues separately
 - Find listing problems
 - Find ads-ready products
 - Find competitor risk
@@ -24,6 +24,9 @@ Open the Google Sheet and check these tabs first:
 - `FLIPKART_DASHBOARD`
 - `FLIPKART_ACTIVE_TASKS`
 - `FLIPKART_ACTION_TRACKER`
+- `FLIPKART_RETURN_ALL_DETAILS`
+- `FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY`
+- `FLIPKART_COURIER_RETURN_SUMMARY`
 - `FLIPKART_FSN_DRILLDOWN`
 - `FLIPKART_ADS_PLANNER`
 - `FLIPKART_COMPETITOR_PRICE_INTELLIGENCE`
@@ -40,7 +43,25 @@ Do not edit these generated tabs:
 - `LOOKER_*` tabs
 - normalized output files
 
-## 4. Daily refresh command
+## 4. Return intelligence
+
+Customer returns and courier returns are different:
+
+- `customer_return` = product or customer dissatisfaction
+- `courier_return` = logistics, RTO, cancellation, or delivery issue
+
+Use the customer return tabs for product-quality review:
+- `FLIPKART_CUSTOMER_RETURN_COMMENTS`
+- `FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY`
+
+Use the courier return tabs for logistics review:
+- `FLIPKART_COURIER_RETURN_COMMENTS`
+- `FLIPKART_COURIER_RETURN_SUMMARY`
+
+Use `FLIPKART_RETURN_TYPE_PIVOT` to compare the mix.
+Do not use courier returns to measure product quality or to block ads by themselves.
+
+## 5. Daily refresh command
 
 Use:
 
@@ -48,11 +69,11 @@ Use:
 .\run_flipkart_quick_refresh.ps1
 ```
 
-## 5. Monthly full report process
+## 6. Monthly full report process
 
 Use the `Monthly Raw File Replacement SOP` in section 12 before any full refresh.
 
-## 6. COGS update process
+## 7. COGS update process
 
 Use this when the cost team updates pricing.
 
@@ -63,7 +84,7 @@ Use this when the cost team updates pricing.
 .\run_flipkart_cogs_refresh.ps1
 ```
 
-## 7. Competitor visual search process
+## 8. Competitor visual search process
 
 Use this only for a small batch of selected FSNs.
 
@@ -72,7 +93,7 @@ Use this only for a small batch of selected FSNs.
 3. Do not use `--force` repeatedly
 4. Check `FLIPKART_COMPETITOR_PRICE_INTELLIGENCE`
 
-## 8. Action tracker process
+## 9. Action tracker process
 
 Update these fields in `FLIPKART_ACTION_TRACKER`:
 - `Owner`
@@ -86,27 +107,27 @@ Then run:
 .\run_flipkart_actions_refresh.ps1
 ```
 
-## 9. Google Keyword Planner status
+## 10. Google Keyword Planner status
 
 - Currently pending Basic Access
 - The system works without it
 - Once approved, run keyword refresh manually
 
-## 10. Common warnings and meaning
+## 11. Common warnings and meaning
 
 - `CACHE_EMPTY` = Google Ads approval pending
 - keyword cache pending = normal until Google approval
 - `Not Enough Data` competitor = image or search data missing
 - Google Sheets 429 = wait 5 minutes and rerun
 
-## 11. Emergency recovery
+## 12. Emergency recovery
 
 - Code backup is on GitHub
 - Run archives are in Google Drive
 - Credentials are local only
 - Do not delete the `credentials` folder
 
-## 12. Monthly Raw File Replacement SOP
+## 13. Monthly Raw File Replacement SOP
 
 This is the safest way to replace raw Flipkart files each month.
 

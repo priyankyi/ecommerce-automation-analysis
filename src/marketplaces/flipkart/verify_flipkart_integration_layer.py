@@ -68,6 +68,10 @@ LOOKER_TABS_FOR_INTEGRATION = [
     LOOKER_DEMAND_PROFILE_TAB,
     LOOKER_COMPETITOR_INTELLIGENCE_TAB,
     LOOKER_ORDER_ITEM_EXPLORER_TAB,
+    "LOOKER_FLIPKART_RETURN_ALL_DETAILS",
+    "LOOKER_FLIPKART_CUSTOMER_RETURNS",
+    "LOOKER_FLIPKART_COURIER_RETURNS",
+    "LOOKER_FLIPKART_RETURN_TYPE_PIVOT",
 ]
 
 
@@ -238,6 +242,9 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         "competitor_intelligence_has_rows",
         "order_item_explorer_has_rows",
         "looker_order_item_explorer_has_rows",
+        "return_all_details_has_rows",
+        "customer_return_summary_has_rows",
+        "courier_return_summary_has_rows",
     ]
     looker_required_tabs = LOOKER_TABS_FOR_INTEGRATION
     looker_source_has_new_tabs = all(tab_name in looker_source_text for tab_name in looker_required_tabs)
