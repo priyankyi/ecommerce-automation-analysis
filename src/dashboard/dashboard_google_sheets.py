@@ -461,6 +461,7 @@ def load_dashboard_payload() -> Dict[str, Any]:
             "LOOKER_FLIPKART_EXECUTIVE_SUMMARY",
             "LOOKER_FLIPKART_FSN_METRICS",
             "LOOKER_FLIPKART_ALERTS",
+            "FLIPKART_ACTIVE_TASKS",
             "LOOKER_FLIPKART_ACTIONS",
             "LOOKER_FLIPKART_ADS",
             "LOOKER_FLIPKART_RETURNS",

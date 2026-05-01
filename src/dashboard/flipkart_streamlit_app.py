@@ -21,6 +21,7 @@ SOURCE_TABS = [
     "LOOKER_FLIPKART_EXECUTIVE_SUMMARY",
     "LOOKER_FLIPKART_FSN_METRICS",
     "LOOKER_FLIPKART_ALERTS",
+    "FLIPKART_ACTIVE_TASKS",
     "LOOKER_FLIPKART_ACTIONS",
     "LOOKER_FLIPKART_ADS",
     "LOOKER_FLIPKART_RETURNS",
@@ -58,7 +59,9 @@ SOURCE_TABS = [
 EXECUTIVE_TAB = "LOOKER_FLIPKART_EXECUTIVE_SUMMARY"
 FSN_METRICS_TAB = "LOOKER_FLIPKART_FSN_METRICS"
 ALERTS_TAB = "LOOKER_FLIPKART_ALERTS"
-ACTIONS_TAB = "LOOKER_FLIPKART_ACTIONS"
+ACTIVE_TASKS_TAB = "FLIPKART_ACTIVE_TASKS"
+ACTION_TRACKER_HISTORY_TAB = "LOOKER_FLIPKART_ACTIONS"
+ACTIONS_TAB = ACTION_TRACKER_HISTORY_TAB
 ADS_TAB = "LOOKER_FLIPKART_ADS"
 RETURNS_TAB = "LOOKER_FLIPKART_RETURNS"
 RETURN_ALL_DETAILS_TAB = "FLIPKART_RETURN_ALL_DETAILS"
@@ -641,6 +644,7 @@ def build_overview_metrics(frames: Dict[str, pd.DataFrame]) -> tuple[List[Dict[s
     executive_df = dataframe_or_empty(frames[EXECUTIVE_TAB])
     fsn_df = dataframe_or_empty(frames[FSN_METRICS_TAB])
     alerts_df = dataframe_or_empty(frames[ALERTS_TAB])
+    current_tasks_df, _ = first_available_frame(frames, [ACTIVE_TASKS_TAB, ACTIONS_TAB])
     actions_df = dataframe_or_empty(frames[ACTIONS_TAB])
     ads_df = dataframe_or_empty(frames[ADS_TAB])
     returns_df = dataframe_or_empty(frames[RETURNS_TAB])
@@ -679,7 +683,9 @@ def build_overview_metrics(frames: Dict[str, pd.DataFrame]) -> tuple[List[Dict[s
     high_alerts = metric_lookup_numeric(metric_lookup, "High Alerts")
     if not high_alerts:
         high_alerts = float(count_matching_values(alerts_df, "Severity", "High"))
-    active_tasks = metric_lookup_numeric(metric_lookup, "Active Tasks")
+    active_tasks = float(count_non_blank_rows(current_tasks_df))
+    if not active_tasks:
+        active_tasks = metric_lookup_numeric(metric_lookup, "Active Tasks")
     if not active_tasks:
         active_tasks = float(count_non_blank_rows(actions_df))
     missing_cogs = metric_lookup_numeric(metric_lookup, "Missing COGS")
@@ -719,7 +725,7 @@ def build_overview_metrics(frames: Dict[str, pd.DataFrame]) -> tuple[List[Dict[s
         {"label": "Total Alerts", "value": f"{int(total_alerts):,}", "note": "All generated alerts"},
         {"label": "Critical Alerts", "value": f"{int(critical_alerts):,}", "note": "Immediate attention"},
         {"label": "High Alerts", "value": f"{int(high_alerts):,}", "note": "Needs fast follow-up"},
-        {"label": "Active Tasks", "value": f"{int(active_tasks):,}", "note": "Open action rows"},
+        {"label": "Active Tasks", "value": f"{int(active_tasks):,}", "note": "Current task queue"},
         {"label": "Missing COGS", "value": f"{int(missing_cogs):,}", "note": "FSNs still waiting on cost"},
         {"label": "Missing Listings", "value": f"{int(missing_listings):,}", "note": "Not present in active listing"},
         {"label": "Ads Ready", "value": f"{int(ads_ready):,}", "note": "Safe for test or scale"},
@@ -859,6 +865,7 @@ def render_executive_overview(frames: Dict[str, pd.DataFrame], metric_lookup: Di
 
 def render_alerts_actions(frames: Dict[str, pd.DataFrame], search_filters: Dict[str, str]) -> None:
     alerts_df = dataframe_or_empty(frames[ALERTS_TAB])
+    current_tasks_df, _ = first_available_frame(frames, [ACTIVE_TASKS_TAB, ACTIONS_TAB])
     actions_df = dataframe_or_empty(frames[ACTIONS_TAB])
     severity_col = resolve_column(alerts_df, ["Severity"])
     owner_col = resolve_column(actions_df, ["Owner"])
@@ -900,14 +907,16 @@ def render_alerts_actions(frames: Dict[str, pd.DataFrame], search_filters: Dict[
 
     critical_alerts = count_matching_values(alerts_filtered, severity_col, "Critical") if severity_col else 0
     high_alerts = count_matching_values(alerts_filtered, severity_col, "High") if severity_col else 0
-    open_actions = count_matching_values(actions_filtered, status_col, "Open") if status_col else 0
+    active_tasks = count_non_blank_rows(current_tasks_df)
+    if not active_tasks:
+        active_tasks = count_non_blank_rows(actions_df)
     in_progress_actions = count_matching_values(actions_filtered, status_col, "In Progress") if status_col else 0
     render_metric_cards(
         [
             {"label": "Filtered Alerts", "value": f"{len(alerts_filtered):,}", "note": "Current search and severity filters"},
             {"label": "Critical Alerts", "value": f"{critical_alerts:,}", "note": "Immediate attention"},
             {"label": "High Alerts", "value": f"{high_alerts:,}", "note": "Needs fast follow-up"},
-            {"label": "Open Actions", "value": f"{open_actions:,}", "note": "Needs assignment"},
+            {"label": "Active Tasks", "value": f"{active_tasks:,}", "note": "Current task queue"},
             {"label": "In Progress", "value": f"{in_progress_actions:,}", "note": "Already moving"},
         ],
         columns=5,
@@ -915,14 +924,14 @@ def render_alerts_actions(frames: Dict[str, pd.DataFrame], search_filters: Dict[
     if severity_col and not alerts_filtered.empty:
         st.markdown("### Alert Severity Mix")
         render_chart_from_counts(alerts_filtered, severity_col, "Alert_Count")
-    st.markdown("### Main Action Table")
+    st.markdown("### Action Tracker History")
     action_cols = ["Action_ID", "Alert_ID", "FSN", "SKU_ID", "Product_Title", "Alert_Type", "Severity", "Owner", "Status", "Action_Taken", "Expected_Impact", "Review_After_Date", "Last_Updated"]
     if actions_filtered.empty:
-        st.info("No action rows matched the current filters.")
+        st.info("No action tracker rows matched the current filters.")
     else:
         top_controls = st.columns([4, 1])
         with top_controls[1]:
-            download_button(actions_filtered.loc[:, [column for column in action_cols if column in actions_filtered.columns]], "flipkart_actions_filtered.csv")
+            download_button(actions_filtered.loc[:, [column for column in action_cols if column in actions_filtered.columns]], "flipkart_action_tracker_history_filtered.csv")
         st.dataframe(
             apply_table_styles(
                 actions_filtered.loc[:, [column for column in action_cols if column in actions_filtered.columns]],
@@ -1968,6 +1977,8 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
 
     fsn_metrics_df = selected_rows_for_fsn(dataframe_or_empty(frames[FSN_METRICS_TAB]), selected_fsn)
     alerts_df = selected_rows_for_fsn(dataframe_or_empty(frames[ALERTS_TAB]), selected_fsn)
+    current_tasks_df, _ = first_available_frame(frames, [ACTIVE_TASKS_TAB, ACTIONS_TAB])
+    current_tasks_df = selected_rows_for_fsn(current_tasks_df, selected_fsn)
     actions_df = selected_rows_for_fsn(dataframe_or_empty(frames[ACTIONS_TAB]), selected_fsn)
     ads_df = selected_rows_for_fsn(dataframe_or_empty(frames[ADS_TAB]), selected_fsn)
     order_item_master_df = selected_rows_for_fsn(dataframe_or_empty(frames[ORDER_ITEM_MASTER_TAB]), selected_fsn)
@@ -1999,7 +2010,7 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
             {"label": "FSN", "value": selected_fsn, "note": title},
             {"label": "SKU", "value": sku, "note": category},
             {"label": "Alerts", "value": f"{len(alerts_df):,}", "note": "Matching alert rows"},
-            {"label": "Actions", "value": f"{len(actions_df):,}", "note": "Matching action rows"},
+            {"label": "Active Tasks", "value": f"{len(current_tasks_df):,}", "note": "Current task rows"},
             {"label": "Profit Rows", "value": f"{len(profit_df):,}", "note": "Adjustment-aware profit"},
             {"label": "Order Item Master Rows", "value": f"{len(order_item_master_df):,}", "note": "Master rows for this FSN"},
             {"label": "Customer Return Count", "value": customer_return_count, "note": f"Rate {customer_return_rate}"},
@@ -2049,9 +2060,9 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
         style_columns={"Severity": SEVERITY_PALETTE},
     )
     render_dataframe_section(
-        "Actions for Selected FSN",
+        "Action Tracker History for Selected FSN",
         actions_df,
-        "flipkart_fsn_actions.csv",
+        "flipkart_fsn_action_tracker_history.csv",
         preferred_columns=["Action_ID", "Alert_ID", "FSN", "SKU_ID", "Product_Title", "Owner", "Status", "Action_Taken", "Expected_Impact", "Review_After_Date", "Last_Updated"],
         style_columns={"Status": STATUS_PALETTE},
     )
