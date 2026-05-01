@@ -383,18 +383,22 @@ Fix Return Intelligence v2 so it correctly extracts Order_ID and Order_Item_ID, 
 Split the current order-item explorer into two clean layers so the team gets one master row per `Order_Item_ID` for copy/search work, while keeping a source-detail layer for audit and debugging.
 
 ### Latest Result
-- `FLIPKART_ORDER_ITEM_EXPLORER` now remains as the legacy compatibility view, while `FLIPKART_ORDER_ITEM_MASTER` and `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` are the new canonical order-item layers
-- Latest order-item explorer rebuild: `status=PASS_WITH_WARNINGS`, `master_rows=6233`, `source_detail_rows=15660`, `legacy_explorer_rows=8115`, `duplicate_order_item_id_count_master=0`
-- Latest order-item explorer warnings: `blank_fsn_count_master=94`, `source_detail_blank_fsn_count=292`, `order_only_fallback_count=0`
-- Latest quick refresh result: `status=SUCCESS_WITH_WARNINGS`, `failed_step=null`, `verification_passed=true`, `steps_run=create_flipkart_order_item_explorer -> create_looker_studio_sources -> verify_flipkart_integration_layer -> verify_flipkart_system_health`
-- Streamlit `Order ID Explorer` now prefers `LOOKER_FLIPKART_ORDER_ITEM_MASTER` and keeps `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` as the audit sidecar
+- `FLIPKART_ORDER_ITEM_EXPLORER` remains as the legacy compatibility view, while `FLIPKART_ORDER_ITEM_MASTER` and `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` are the canonical order-item layers
+- New Looker/Streamlit source tabs are live: `LOOKER_FLIPKART_ORDER_ITEM_MASTER` and `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL`
+- Latest `create_flipkart_order_item_explorer` result: `status=PASS_WITH_WARNINGS`, `legacy_explorer_rows=8115`, `master_rows=6233`, `source_detail_rows=15660`, `order_id_present_count=6139`, `order_item_id_present_count=6233`, `duplicate_order_item_id_count=0`
+- Latest explorer warnings: `blank_fsn_count_master=94`, `source_detail_blank_fsn_count=292`
+- Latest `verify_flipkart_order_item_explorer` result: `status=PASS_WITH_WARNINGS`, `duplicate_order_item_id_count_master=0`, `source_detail_row_count_ge_master=true`, `ids_treated_as_text=true`, `source_row_count_populated=true`, `sources_present_populated=true`
+- Latest quick refresh result: `status=SUCCESS_WITH_WARNINGS`, `failed_step=null`, `external_google_ads_called=false`, `external_visual_search_called=false`, `manual_tabs_preserved=true`
+- Dashboard behavior now prefers `LOOKER_FLIPKART_ORDER_ITEM_MASTER` for daily search/copy work and uses `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` only for audit/debugging
+- Team guidance: copy `Order_ID` / `Order_Item_ID` from the master view first, then verify source-level differences manually in Flipkart only when needed
 
 ### Success Criteria
 - Create `FLIPKART_ORDER_ITEM_MASTER` with one row per non-blank `Order_Item_ID`
 - Create `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` with all source-level rows preserved
 - Duplicate `Order_Item_ID` count in the master should be `0`
-- Streamlit `Order ID Explorer` should show master rows first
-- `FSN Deep Dive` should use the master plus source detail where useful
+- Streamlit `Order ID Explorer` should show master rows first and keep source detail as an audit expander
+- `FSN Deep Dive` should show order-item master rows for the selected FSN plus source detail rows where useful
+- Keep the dashboard read-only and copy-friendly for daily team use
 - Dashboard remains read-only, Flipkart-only, and source-driven
 
 ### Guardrails
