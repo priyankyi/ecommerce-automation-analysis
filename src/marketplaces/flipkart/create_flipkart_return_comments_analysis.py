@@ -77,6 +77,9 @@ SUMMARY_HEADERS = [
     "SKU_ID",
     "Product_Title",
     "Total_Returns_In_Detailed_Report",
+    "Customer_Return_Count",
+    "Courier_Return_Count",
+    "Unknown_Return_Count",
     "Top_Issue_Category",
     "Top_Return_Reason",
     "Top_Return_Sub_Reason",
@@ -545,6 +548,14 @@ def build_detail_rows(
 
 
 def build_summary_rows(detail_rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def normalize_return_type_value(value: Any) -> str:
+        normalized = normalize_text(value).lower()
+        if normalized in {"customer_return", "customer return", "customer"}:
+            return "customer_return"
+        if normalized in {"courier_return", "courier return", "courier", "rto", "return to origin", "return_to_origin", "logistics return"}:
+            return "courier_return"
+        return "unknown_return"
+
     grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for row in detail_rows:
         grouped[clean_fsn(row.get("FSN", ""))].append(row)
@@ -558,6 +569,9 @@ def build_summary_rows(detail_rows: Sequence[Dict[str, Any]]) -> List[Dict[str, 
         reason_counter = Counter(normalize_text(row.get("Return_Reason", "")) for row in rows if normalize_text(row.get("Return_Reason", "")))
         sub_reason_counter = Counter(normalize_text(row.get("Return_Sub_Reason", "")) for row in rows if normalize_text(row.get("Return_Sub_Reason", "")))
         comments_count = sum(1 for row in rows if normalize_text(row.get("Comments", "")))
+        customer_return_count = sum(1 for row in rows if normalize_return_type_value(row.get("Return_Type", "")) == "customer_return")
+        courier_return_count = sum(1 for row in rows if normalize_return_type_value(row.get("Return_Type", "")) == "courier_return")
+        unknown_return_count = max(len(rows) - customer_return_count - courier_return_count, 0)
 
         top_issue_category = max(
             ISSUE_PRIORITY,
@@ -596,6 +610,9 @@ def build_summary_rows(detail_rows: Sequence[Dict[str, Any]]) -> List[Dict[str, 
                 "SKU_ID": sku_id,
                 "Product_Title": product_title,
                 "Total_Returns_In_Detailed_Report": len(rows),
+                "Customer_Return_Count": customer_return_count,
+                "Courier_Return_Count": courier_return_count,
+                "Unknown_Return_Count": unknown_return_count,
                 "Top_Issue_Category": top_issue_category,
                 "Top_Return_Reason": top_reason,
                 "Top_Return_Sub_Reason": top_sub_reason,

@@ -606,19 +606,22 @@ def build_visible_grid(
         98: ("Top_Return_Reason", return_summary_lookup("Top_Return_Reason")),
         99: ("Top_Return_Sub_Reason", return_summary_lookup("Top_Return_Sub_Reason")),
         100: ("Total_Returns_In_Detailed_Report", return_summary_lookup("Total_Returns_In_Detailed_Report")),
-        101: ("Critical_Issue_Count", return_summary_lookup("Critical_Issue_Count")),
-        102: ("High_Issue_Count", return_summary_lookup("High_Issue_Count")),
-        103: ("Product_Issue_Count", return_summary_lookup("Product_Issue_Count")),
-        104: ("Logistics_Issue_Count", return_summary_lookup("Logistics_Issue_Count")),
-        105: ("Customer_RTO_Count", return_summary_lookup("Customer_RTO_Count")),
-        106: ("Suggested_Return_Action", return_summary_lookup("Suggested_Return_Action")),
-        107: ("Return_Action_Priority", return_summary_lookup("Return_Action_Priority")),
+        101: ("Customer_Return_Count", return_summary_lookup("Customer_Return_Count")),
+        102: ("Courier_Return_Count", return_summary_lookup("Courier_Return_Count")),
+        103: ("Unknown_Return_Count", return_summary_lookup("Unknown_Return_Count")),
+        104: ("Critical_Issue_Count", return_summary_lookup("Critical_Issue_Count")),
+        105: ("High_Issue_Count", return_summary_lookup("High_Issue_Count")),
+        106: ("Product_Issue_Count", return_summary_lookup("Product_Issue_Count")),
+        107: ("Logistics_Issue_Count", return_summary_lookup("Logistics_Issue_Count")),
+        108: ("Customer_RTO_Count", return_summary_lookup("Customer_RTO_Count")),
+        109: ("Suggested_Return_Action", return_summary_lookup("Suggested_Return_Action")),
+        110: ("Return_Action_Priority", return_summary_lookup("Return_Action_Priority")),
     }
     for row_index, (label, formula) in return_issue_rows.items():
         set_cell(row_index, 1, label)
         set_cell(row_index, 2, formula)
 
-    set_cell(109, 1, "Recent Return Comments for Selected FSN")
+    set_cell(113, 1, "Recent Return Comments for Selected FSN")
     recent_return_comments_headers = [
         "Return_ID",
         "Return_Reason",
@@ -629,8 +632,8 @@ def build_visible_grid(
         "Suggested_Action",
     ]
     for col_index, header in enumerate(recent_return_comments_headers, start=1):
-        set_cell(110, col_index, header)
-    set_cell(111, 1, build_recent_return_comments_formula(return_comment_columns))
+        set_cell(114, col_index, header)
+    set_cell(115, 1, build_recent_return_comments_formula(return_comment_columns))
 
     return grid
 
