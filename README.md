@@ -166,6 +166,11 @@ python -m src.marketplaces.flipkart.create_flipkart_order_item_explorer
 python -m src.marketplaces.flipkart.verify_flipkart_order_item_explorer
 ```
 
+Order ID Explorer now writes:
+- `FLIPKART_ORDER_ITEM_MASTER` for one clean row per `Order_Item_ID`
+- `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` for audit/debug source rows
+- `LOOKER_FLIPKART_ORDER_ITEM_MASTER` and `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` for dashboard/Looker use
+
 Flipkart COGS layer verification:
 ```powershell
 python -m src.marketplaces.flipkart.verify_flipkart_cogs_layer
@@ -335,7 +340,8 @@ Looker Studio connection guide:
 9. Use `LOOKER_FLIPKART_ALERTS` and `LOOKER_FLIPKART_ACTIONS` for the operational dashboard
 10. Use `LOOKER_FLIPKART_ADS`, `LOOKER_FLIPKART_RETURNS`, and `LOOKER_FLIPKART_LISTINGS` for the supporting views
 11. Use `LOOKER_FLIPKART_RETURN_ALL_DETAILS`, `LOOKER_FLIPKART_CUSTOMER_RETURNS`, `LOOKER_FLIPKART_COURIER_RETURNS`, and `LOOKER_FLIPKART_RETURN_TYPE_PIVOT` for return intelligence
-12. Use `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER` for copy-friendly Order ID / Order Item ID checks
+12. Use `LOOKER_FLIPKART_ORDER_ITEM_MASTER` for daily Order ID / Order Item ID checks
+13. Use `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` only when you need to audit why a master row differs across reports
 
 Stage 6 note:
 - `create_flipkart_alerts_and_tasks` now prefers `Final_Net_Profit` and `Final_Profit_Margin` when `COGS_Status` is `Entered` or `Verified`, and falls back to `Net_Profit_Before_COGS` plus COGS-missing alerts when cost is unavailable

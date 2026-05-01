@@ -54,7 +54,14 @@ STEP_TAB_MAP: Dict[str, List[str]] = {
     "update_product_type_demand_profile": ["PRODUCT_TYPE_DEMAND_PROFILE"],
     "run_flipkart_visual_competitor_search": ["FLIPKART_COMPETITOR_SEARCH_QUEUE", "FLIPKART_VISUAL_COMPETITOR_RESULTS"],
     "create_flipkart_competitor_price_intelligence": ["FLIPKART_COMPETITOR_PRICE_INTELLIGENCE", "LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE"],
-    "create_flipkart_order_item_explorer": ["FLIPKART_ORDER_ITEM_EXPLORER", "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"],
+    "create_flipkart_order_item_explorer": [
+        "FLIPKART_ORDER_ITEM_EXPLORER",
+        "FLIPKART_ORDER_ITEM_MASTER",
+        "FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
+        "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
+        "LOOKER_FLIPKART_ORDER_ITEM_MASTER",
+        "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
+    ],
     "create_looker_studio_sources": [
         "LOOKER_FLIPKART_EXECUTIVE_SUMMARY",
         "LOOKER_FLIPKART_FSN_METRICS",
@@ -71,6 +78,8 @@ STEP_TAB_MAP: Dict[str, List[str]] = {
         "LOOKER_FLIPKART_MODULE_CONFIDENCE",
         "LOOKER_FLIPKART_DEMAND_PROFILE",
         "LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE",
+        "LOOKER_FLIPKART_ORDER_ITEM_MASTER",
+        "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
     ],
 }
 

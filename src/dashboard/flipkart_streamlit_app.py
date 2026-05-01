@@ -49,6 +49,10 @@ SOURCE_TABS = [
     "FLIPKART_FSN_RUN_COMPARISON",
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
     "FLIPKART_ORDER_ITEM_EXPLORER",
+    "FLIPKART_ORDER_ITEM_MASTER",
+    "FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
+    "LOOKER_FLIPKART_ORDER_ITEM_MASTER",
+    "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
 ]
 
 EXECUTIVE_TAB = "LOOKER_FLIPKART_EXECUTIVE_SUMMARY"
@@ -79,6 +83,10 @@ FSN_RUN_COMPARISON_TAB = "FLIPKART_FSN_RUN_COMPARISON"
 VISUAL_COMPETITOR_RESULTS_TAB = "FLIPKART_VISUAL_COMPETITOR_RESULTS"
 ORDER_ITEM_EXPLORER_TAB = "FLIPKART_ORDER_ITEM_EXPLORER"
 LOOKER_ORDER_ITEM_EXPLORER_TAB = "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"
+ORDER_ITEM_MASTER_TAB = "FLIPKART_ORDER_ITEM_MASTER"
+ORDER_ITEM_SOURCE_DETAIL_TAB = "FLIPKART_ORDER_ITEM_SOURCE_DETAIL"
+LOOKER_ORDER_ITEM_MASTER_TAB = "LOOKER_FLIPKART_ORDER_ITEM_MASTER"
+LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB = "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL"
 
 PAGE_ORDER = [
     "Executive Overview",
@@ -1369,14 +1377,21 @@ def render_return_comments_explorer(frames: Dict[str, pd.DataFrame], search_filt
 
 
 def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: Dict[str, str]) -> None:
-    order_df, source_tab = first_available_frame(frames, [LOOKER_ORDER_ITEM_EXPLORER_TAB, ORDER_ITEM_EXPLORER_TAB])
+    order_df, source_tab = first_available_frame(
+        frames,
+        [LOOKER_ORDER_ITEM_MASTER_TAB, ORDER_ITEM_MASTER_TAB, LOOKER_ORDER_ITEM_EXPLORER_TAB, ORDER_ITEM_EXPLORER_TAB],
+    )
+    source_detail_df, source_detail_tab = first_available_frame(
+        frames,
+        [LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB, ORDER_ITEM_SOURCE_DETAIL_TAB],
+    )
     render_page_header(
         "Order ID Explorer",
-        "Copy-friendly order-level lookup for Order ID, Order Item ID, and return checks. Use this page to verify manual Flipkart details without editing the source data.",
+        "Master view first, with source detail below for audit. Use the master table for daily work and the source detail only when you need to trace a value back to its report row.",
         latest_non_blank_value(order_df, ["Run_ID"]),
     )
     if order_df.empty:
-        st.info("No order-item explorer rows are available yet.")
+        st.info("No order-item master rows are available yet.")
         return
 
     order_id_col = resolve_column(order_df, ["Order_ID", "Order ID"])
@@ -1384,31 +1399,28 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
     fsn_col = resolve_column(order_df, ["FSN"])
     sku_col = resolve_column(order_df, ["SKU_ID", "Seller_SKU"])
     title_col = resolve_column(order_df, ["Product_Title", "Product Name", "Title"])
-    return_type_col = resolve_column(order_df, ["Return_Type"])
-    return_id_col = resolve_column(order_df, ["Return_ID"])
-    customer_issue_col = resolve_column(order_df, ["Customer_Issue_Category"])
-    courier_issue_col = resolve_column(order_df, ["Courier_Issue_Category"])
-    customer_risk_col = resolve_column(order_df, ["Customer_Return_Risk_Level"])
-    courier_risk_col = resolve_column(order_df, ["Courier_Return_Risk_Level"])
-    risk_col = resolve_column(order_df, ["Competition_Risk_Level"])
+    return_type_col = resolve_column(order_df, ["Return_Type_Final", "Return_Type"])
+    customer_return_col = resolve_column(order_df, ["Customer_Return_YN"])
+    courier_return_col = resolve_column(order_df, ["Courier_Return_YN"])
     decision_col = resolve_column(order_df, ["Final_Ads_Decision"])
-    return_reason_col = resolve_column(order_df, ["Return_Reason"])
+    risk_col = resolve_column(order_df, ["Competition_Risk_Level"])
+    completeness_col = resolve_column(order_df, ["Data_Completeness_Status"])
 
-    st.caption(f"Source tab: `{source_tab}`")
+    st.caption(f"Primary source tab: `{source_tab}` | Audit tab: `{source_detail_tab}`")
 
     search_row_1 = st.columns(3)
     with search_row_1[0]:
-        order_id_search = st.text_input("Order ID search", value="", key="order_item_order_id_search", placeholder="Type an Order ID")
+        order_id_search = st.text_input("Search Order ID", value="", key="order_item_order_id_search", placeholder="Type an Order ID")
     with search_row_1[1]:
-        order_item_search = st.text_input("Order Item ID search", value="", key="order_item_order_item_search", placeholder="Type an Order Item ID")
+        order_item_search = st.text_input("Search Order Item ID", value="", key="order_item_order_item_search", placeholder="Type an Order Item ID")
     with search_row_1[2]:
-        fsn_search = st.text_input("FSN search", value=search_filters.get("fsn", ""), key="order_item_fsn_search", placeholder="Type an FSN")
+        fsn_search = st.text_input("Search FSN", value=search_filters.get("fsn", ""), key="order_item_fsn_search", placeholder="Type an FSN")
 
     search_row_2 = st.columns(2)
     with search_row_2[0]:
-        sku_search = st.text_input("SKU ID search", value=search_filters.get("sku", ""), key="order_item_sku_search", placeholder="Type a SKU ID")
+        sku_search = st.text_input("Search SKU_ID", value=search_filters.get("sku", ""), key="order_item_sku_search", placeholder="Type a SKU ID")
     with search_row_2[1]:
-        title_search = st.text_input("Product title search", value=search_filters.get("product", ""), key="order_item_title_search", placeholder="Type a product title")
+        title_search = st.text_input("Search Product Title", value=search_filters.get("product", ""), key="order_item_title_search", placeholder="Type a product title")
 
     filtered = order_df.copy()
     if order_id_search and order_id_col:
@@ -1424,116 +1436,204 @@ def render_order_item_explorer(frames: Dict[str, pd.DataFrame], search_filters: 
 
     filter_row_1 = st.columns(3)
     return_type_values = unique_text_values(filtered, return_type_col) if return_type_col else []
-    customer_issue_values = unique_text_values(filtered, customer_issue_col) if customer_issue_col else []
-    courier_issue_values = unique_text_values(filtered, courier_issue_col) if courier_issue_col else []
+    customer_return_values = unique_text_values(filtered, customer_return_col) if customer_return_col else []
+    courier_return_values = unique_text_values(filtered, courier_return_col) if courier_return_col else []
     with filter_row_1[0]:
-        return_type_pick = st.multiselect("Return type", return_type_values or ["customer_return", "courier_return", "unknown_return"], default=return_type_values or ["customer_return", "courier_return", "unknown_return"], key="order_item_return_type_filter")
+        return_type_pick = st.multiselect("Return_Type_Final", return_type_values or ["customer_return", "courier_return", "unknown_return"], default=return_type_values or ["customer_return", "courier_return", "unknown_return"], key="order_item_return_type_filter")
     with filter_row_1[1]:
-        customer_issue_pick = st.multiselect("Customer issue category", customer_issue_values, default=customer_issue_values, key="order_item_customer_issue_filter")
+        customer_return_pick = st.multiselect("Customer_Return_YN", customer_return_values or ["Yes", "No"], default=customer_return_values or ["Yes", "No"], key="order_item_customer_return_filter")
     with filter_row_1[2]:
-        courier_issue_pick = st.multiselect("Courier issue category", courier_issue_values, default=courier_issue_values, key="order_item_courier_issue_filter")
+        courier_return_pick = st.multiselect("Courier_Return_YN", courier_return_values or ["Yes", "No"], default=courier_return_values or ["Yes", "No"], key="order_item_courier_return_filter")
 
-    filter_row_2 = st.columns(2)
-    customer_risk_values = unique_text_values(filtered, customer_risk_col) if customer_risk_col else []
-    courier_risk_values = unique_text_values(filtered, courier_risk_col) if courier_risk_col else []
-    with filter_row_2[0]:
-        customer_risk_pick = st.multiselect("Customer return risk", customer_risk_values, default=customer_risk_values, key="order_item_customer_risk_filter")
-    with filter_row_2[1]:
-        courier_risk_pick = st.multiselect("Courier return risk", courier_risk_values, default=courier_risk_values, key="order_item_courier_risk_filter")
-
-    filter_row_3 = st.columns(2)
-    risk_values = unique_text_values(filtered, risk_col) if risk_col else []
+    filter_row_2 = st.columns(3)
     decision_values = unique_text_values(filtered, decision_col) if decision_col else []
-    with filter_row_3[0]:
-        risk_pick = st.multiselect("Competition risk level", risk_values, default=risk_values, key="order_item_risk_filter")
-    with filter_row_3[1]:
-        decision_pick = st.multiselect("Final ads decision", decision_values, default=decision_values, key="order_item_decision_filter")
+    risk_values = unique_text_values(filtered, risk_col) if risk_col else []
+    completeness_values = unique_text_values(filtered, completeness_col) if completeness_col else []
+    with filter_row_2[0]:
+        decision_pick = st.multiselect("Final_Ads_Decision", decision_values, default=decision_values, key="order_item_decision_filter")
+    with filter_row_2[1]:
+        risk_pick = st.multiselect("Competition_Risk_Level", risk_values, default=risk_values, key="order_item_risk_filter")
+    with filter_row_2[2]:
+        completeness_pick = st.multiselect("Data_Completeness_Status", completeness_values, default=completeness_values, key="order_item_completeness_filter")
 
     if return_type_col:
         filtered = filter_by_selected_values(filtered, return_type_col, return_type_pick)
-    if customer_issue_col:
-        filtered = filter_by_selected_values(filtered, customer_issue_col, customer_issue_pick)
-    if courier_issue_col:
-        filtered = filter_by_selected_values(filtered, courier_issue_col, courier_issue_pick)
-    if customer_risk_col:
-        filtered = filter_by_selected_values(filtered, customer_risk_col, customer_risk_pick)
-    if courier_risk_col:
-        filtered = filter_by_selected_values(filtered, courier_risk_col, courier_risk_pick)
-    if risk_col:
-        filtered = filter_by_selected_values(filtered, risk_col, risk_pick)
+    if customer_return_col:
+        filtered = filter_by_selected_values(filtered, customer_return_col, customer_return_pick)
+    if courier_return_col:
+        filtered = filter_by_selected_values(filtered, courier_return_col, courier_return_pick)
     if decision_col:
         filtered = filter_by_selected_values(filtered, decision_col, decision_pick)
+    if risk_col:
+        filtered = filter_by_selected_values(filtered, risk_col, risk_pick)
+    if completeness_col:
+        filtered = filter_by_selected_values(filtered, completeness_col, completeness_pick)
 
     order_id_count = count_unique_non_blank(filtered, order_id_col) if order_id_col else 0
     order_item_count = count_unique_non_blank(filtered, order_item_col) if order_item_col else 0
     returned_rows = 0
-    if not filtered.empty and (return_type_col or return_id_col):
+    if not filtered.empty:
         status_match = pd.Series(False, index=filtered.index)
         if return_type_col:
             status_match = status_match | (filtered[return_type_col].fillna("").astype(str).map(normalize_text) != "")
-        if return_id_col:
-            status_match = status_match | (filtered[return_id_col].fillna("").astype(str).map(normalize_text) != "")
+        if customer_return_col:
+            status_match = status_match | (filtered[customer_return_col].fillna("").astype(str).map(normalize_text).str.lower() == "yes")
+        if courier_return_col:
+            status_match = status_match | (filtered[courier_return_col].fillna("").astype(str).map(normalize_text).str.lower() == "yes")
         returned_rows = int(status_match.sum())
-    missing_order_item_count = int((filtered[order_item_col].fillna("").astype(str).map(normalize_text) == "").sum()) if order_item_col and not filtered.empty else 0
+    missing_fsn_count = int((filtered[fsn_col].fillna("").astype(str).map(normalize_text) == "").sum()) if fsn_col and not filtered.empty else 0
 
     render_metric_cards(
         [
-            {"label": "Total Order Item Rows", "value": f"{len(filtered):,}", "note": "Current filtered view"},
-            {"label": "Unique Orders", "value": f"{order_id_count:,}", "note": "Distinct Order_ID values"},
-            {"label": "Unique Order Items", "value": f"{order_item_count:,}", "note": "Distinct Order_Item_ID values"},
-            {"label": "Returned Rows", "value": f"{returned_rows:,}", "note": "Rows with return data"},
-            {"label": "Missing Order Item ID", "value": f"{missing_order_item_count:,}", "note": "Use Order_ID + FSN + SKU_ID fallback"},
+            {"label": "Master Rows", "value": f"{len(filtered):,}", "note": "Current master view"},
+            {"label": "Unique Order IDs", "value": f"{order_id_count:,}", "note": "Distinct Order_ID values"},
+            {"label": "Unique Order Item IDs", "value": f"{order_item_count:,}", "note": "Distinct Order_Item_ID values"},
+            {"label": "Returned Order Items", "value": f"{returned_rows:,}", "note": "Rows with return signals"},
+            {"label": "Rows Missing FSN", "value": f"{missing_fsn_count:,}", "note": "Needs source follow-up"},
         ],
         columns=5,
     )
 
-    preferred_columns = [
+    master_preferred_columns = [
         "Order_ID",
         "Order_Item_ID",
-        "Return_ID",
-        "Return_Type",
-        "Customer_Return_YN",
-        "Courier_Return_YN",
         "FSN",
         "SKU_ID",
         "Product_Title",
         "Order_Date",
         "Selling_Price",
         "Net_Profit",
-        "Return_Reason",
+        "Return_YN",
+        "Return_Type_Final",
+        "Return_Reason_Final",
         "Customer_Issue_Category",
         "Courier_Issue_Category",
-        "Customer_Return_Risk_Level",
-        "Courier_Return_Risk_Level",
+        "Final_Ads_Decision",
+        "Competition_Risk_Level",
+        "Data_Completeness_Status",
     ]
-    style_columns = {
-        "Return_Type": STATUS_PALETTE,
-        "Customer_Return_YN": STATUS_PALETTE,
-        "Courier_Return_YN": STATUS_PALETTE,
-        "Customer_Issue_Category": CUSTOMER_RETURN_CATEGORY_PALETTE,
-        "Courier_Issue_Category": COURIER_RETURN_CATEGORY_PALETTE,
-        "Customer_Return_Risk_Level": RISK_PALETTE,
-        "Courier_Return_Risk_Level": RISK_PALETTE,
-        "Competition_Risk_Level": RISK_PALETTE,
-        "Final_Ads_Decision": DECISION_PALETTE,
-    }
     render_dataframe_section(
-        "Order Item Explorer Table",
+        "Order Item Master",
         filtered,
-        "flipkart_order_item_explorer_filtered.csv",
-        caption="Use the table, then copy the IDs below for manual Flipkart checks.",
-        preferred_columns=[column for column in preferred_columns if column in filtered.columns],
-        style_columns={key: value for key, value in style_columns.items() if key in filtered.columns},
+        "flipkart_order_item_master_filtered.csv",
+        caption="Copy from this table for daily team work.",
+        preferred_columns=[column for column in master_preferred_columns if column in filtered.columns],
+        style_columns={
+            "Return_YN": STATUS_PALETTE,
+            "Customer_Return_YN": STATUS_PALETTE,
+            "Courier_Return_YN": STATUS_PALETTE,
+            "Customer_Issue_Category": CUSTOMER_RETURN_CATEGORY_PALETTE,
+            "Courier_Issue_Category": COURIER_RETURN_CATEGORY_PALETTE,
+            "Competition_Risk_Level": RISK_PALETTE,
+            "Final_Ads_Decision": DECISION_PALETTE,
+        },
     )
 
     if not filtered.empty:
         order_item_values = "\n".join(dict.fromkeys(value for value in filtered[order_item_col].fillna("").astype(str).tolist() if normalize_text(value))) if order_item_col else ""
         order_values = "\n".join(dict.fromkeys(value for value in filtered[order_id_col].fillna("").astype(str).tolist() if normalize_text(value))) if order_id_col else ""
-        copy_cols = st.columns(2)
+        fsn_values = "\n".join(dict.fromkeys(value for value in filtered[fsn_col].fillna("").astype(str).tolist() if normalize_text(value))) if fsn_col else ""
+        copy_cols = st.columns(3)
         with copy_cols[0]:
-            st.text_area("Order Item IDs", value=order_item_values, height=180, help="Copy this list into Flipkart checks.", key="order_item_copy_list")
+            st.text_area("Filtered Order_Item_ID list", value=order_item_values, height=180, help="Copy this list into Flipkart checks.", key="order_item_copy_list")
         with copy_cols[1]:
-            st.text_area("Order IDs", value=order_values, height=180, help="Copy this list into Flipkart checks.", key="order_copy_list")
+            st.text_area("Filtered Order_ID list", value=order_values, height=180, help="Copy this list into Flipkart checks.", key="order_copy_list")
+        with copy_cols[2]:
+            st.text_area("Filtered FSN list", value=fsn_values, height=180, help="Optional FSN copy list for the same filtered rows.", key="order_fsn_copy_list")
+
+    with st.expander("Source detail audit", expanded=False):
+        source_filtered = source_detail_df.copy()
+        selected_order_ids = {normalize_text(value) for value in filtered[order_id_col].fillna("").astype(str).tolist() if order_id_col and normalize_text(value)} if order_id_col else set()
+        selected_order_item_ids = {normalize_text(value) for value in filtered[order_item_col].fillna("").astype(str).tolist() if order_item_col and normalize_text(value)} if order_item_col else set()
+        selected_fsns = {clean_fsn(value) for value in filtered[fsn_col].fillna("").astype(str).tolist() if fsn_col and clean_fsn(value)} if fsn_col else set()
+        if not source_filtered.empty:
+            if "Order_ID" in source_filtered.columns and selected_order_ids:
+                source_filtered = source_filtered[source_filtered["Order_ID"].fillna("").astype(str).map(normalize_text).isin(selected_order_ids)].copy()
+            if "Order_Item_ID" in source_filtered.columns and selected_order_item_ids:
+                source_filtered = pd.concat(
+                    [
+                        source_filtered,
+                        source_detail_df[source_detail_df["Order_Item_ID"].fillna("").astype(str).map(normalize_text).isin(selected_order_item_ids)].copy()
+                    ],
+                    ignore_index=True,
+                ).drop_duplicates()
+            if "FSN" in source_filtered.columns and selected_fsns:
+                source_filtered = pd.concat(
+                    [
+                        source_filtered,
+                        source_detail_df[source_detail_df["FSN"].fillna("").astype(str).map(clean_fsn).isin(selected_fsns)].copy()
+                    ],
+                    ignore_index=True,
+                ).drop_duplicates()
+        if source_filtered.empty:
+            st.info("No source detail rows matched the current filtered master rows.")
+        else:
+            render_dataframe_section(
+                "Order Item Source Detail",
+                source_filtered,
+                "flipkart_order_item_source_detail_filtered.csv",
+                caption="Use this only to trace why a master value exists or differs across reports.",
+                preferred_columns=[
+                    column
+                    for column in [
+                        "Source_File",
+                        "Source_Tab",
+                        "Source_Row_Type",
+                        "Order_ID",
+                        "Order_Item_ID",
+                        "Return_ID",
+                        "FSN",
+                        "SKU_ID",
+                        "Product_Title",
+                        "Order_Date",
+                        "Settlement_Date",
+                        "Return_Date",
+                        "Quantity",
+                        "Selling_Price",
+                        "Settlement_Amount",
+                        "Net_Profit",
+                        "Return_Type",
+                        "Customer_Return_YN",
+                        "Courier_Return_YN",
+                        "Return_Status",
+                        "Return_Reason",
+                        "Return_Sub_Reason",
+                        "Customer_Issue_Category",
+                        "Courier_Issue_Category",
+                        "Alert_Count",
+                        "Critical_Alert_Count",
+                        "Final_Ads_Decision",
+                        "Competition_Risk_Level",
+                        "Data_Gap_Reason",
+                        "Last_Updated",
+                    ]
+                    if column in source_filtered.columns
+                ],
+                style_columns={
+                    "Source_Row_Type": STATUS_PALETTE,
+                    "Return_Type": STATUS_PALETTE,
+                    "Customer_Return_YN": STATUS_PALETTE,
+                    "Courier_Return_YN": STATUS_PALETTE,
+                    "Customer_Issue_Category": CUSTOMER_RETURN_CATEGORY_PALETTE,
+                    "Courier_Issue_Category": COURIER_RETURN_CATEGORY_PALETTE,
+                    "Competition_Risk_Level": RISK_PALETTE,
+                    "Final_Ads_Decision": DECISION_PALETTE,
+                },
+            )
+
+    with st.expander("Legacy compatibility view", expanded=False):
+        legacy_df = dataframe_or_empty(frames.get(ORDER_ITEM_EXPLORER_TAB, pd.DataFrame()))
+        if legacy_df.empty:
+            legacy_df = dataframe_or_empty(frames.get(LOOKER_ORDER_ITEM_EXPLORER_TAB, pd.DataFrame()))
+        if legacy_df.empty:
+            st.info("Legacy explorer rows are not loaded.")
+        else:
+            render_dataframe_section(
+                "Legacy Order Item Explorer",
+                legacy_df,
+                "flipkart_order_item_explorer_legacy_filtered.csv",
+                preferred_columns=[column for column in ["Order_ID", "Order_Item_ID", "FSN", "SKU_ID", "Product_Title", "Return_Type", "Customer_Return_YN", "Courier_Return_YN", "Net_Profit", "Final_Ads_Decision", "Competition_Risk_Level", "Data_Gap_Reason", "Last_Updated"] if column in legacy_df.columns],
+            )
 def render_listing_issues(frames: Dict[str, pd.DataFrame], search_filters: Dict[str, str]) -> None:
     listings_df = dataframe_or_empty(frames[LISTINGS_TAB])
     missing_df = dataframe_or_empty(frames[MISSING_ACTIVE_LISTINGS_TAB])
@@ -1859,6 +1959,8 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
     alerts_df = selected_rows_for_fsn(dataframe_or_empty(frames[ALERTS_TAB]), selected_fsn)
     actions_df = selected_rows_for_fsn(dataframe_or_empty(frames[ACTIONS_TAB]), selected_fsn)
     ads_df = selected_rows_for_fsn(dataframe_or_empty(frames[ADS_TAB]), selected_fsn)
+    order_item_master_df = selected_rows_for_fsn(dataframe_or_empty(frames[ORDER_ITEM_MASTER_TAB]), selected_fsn)
+    order_item_source_detail_df = selected_rows_for_fsn(dataframe_or_empty(frames[ORDER_ITEM_SOURCE_DETAIL_TAB]), selected_fsn)
     all_returns_df = selected_rows_for_fsn(dataframe_or_empty(frames[RETURN_ALL_DETAILS_TAB]), selected_fsn)
     customer_summary_df = selected_rows_for_fsn(dataframe_or_empty(frames[CUSTOMER_RETURN_SUMMARY_TAB]), selected_fsn)
     courier_summary_df = selected_rows_for_fsn(dataframe_or_empty(frames[COURIER_RETURN_SUMMARY_TAB]), selected_fsn)
@@ -1882,6 +1984,7 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
             {"label": "Alerts", "value": f"{len(alerts_df):,}", "note": "Matching alert rows"},
             {"label": "Actions", "value": f"{len(actions_df):,}", "note": "Matching action rows"},
             {"label": "Profit Rows", "value": f"{len(profit_df):,}", "note": "Adjustment-aware profit"},
+            {"label": "Order Item Master Rows", "value": f"{len(order_item_master_df):,}", "note": "Master rows for this FSN"},
             {"label": "Customer Returns", "value": f"{len(customer_returns_df):,}", "note": "Product-quality rows"},
             {"label": "Courier Returns", "value": f"{len(courier_returns_df):,}", "note": "Logistics rows"},
             {"label": "Listings", "value": f"{len(listings_df):,}", "note": "Listing presence rows"},
@@ -1897,6 +2000,7 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
         ("Ads", ads_df, ["FSN", "SKU_ID", "Product_Title", "Final_Product_Type", "Final_Seasonality_Tag", "Ad_Run_Type", "Current_Ad_Status", "Ad_ROAS", "Ad_ACOS", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"]),
         ("Customer Returns", customer_summary_df, ["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Customer_Return_Count", "Customer_Return_Rate", "Quality_Issue_Count", "Defective_Product_Count", "Damaged_Product_Count", "Missing_Item_Count", "Wrong_Product_Count", "Customer_Remorse_Count", "Top_Customer_Return_Reason", "Top_Customer_Return_Sub_Reason", "Customer_Return_Risk_Level", "Suggested_Action", "Data_Gap_Reason", "Last_Updated"]),
         ("Courier Returns", courier_summary_df, ["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Courier_Return_Count", "Courier_Return_Rate", "Order_Cancelled_Count", "Attempts_Exhausted_Count", "Shipment_Ageing_Count", "Not_Serviceable_Count", "ORC_Validated_Count", "Delivery_Failed_Count", "Top_Courier_Return_Reason", "Top_Courier_Return_Sub_Reason", "Courier_Return_Risk_Level", "Suggested_Action", "Data_Gap_Reason", "Last_Updated"]),
+        ("Order Item Master", order_item_master_df, ["Run_ID", "Order_ID", "Order_Item_ID", "Master_Order_Key", "FSN", "SKU_ID", "Product_Title", "Order_Date", "Latest_Event_Date", "Selling_Price", "Settlement_Amount", "Net_Profit", "Return_YN", "Return_Type_Final", "Customer_Return_YN", "Courier_Return_YN", "Data_Completeness_Status", "Data_Gap_Reason", "Last_Updated"]),
         ("Listings", listings_df, ["FSN", "SKU_ID", "Product_Title", "Found_In_Active_Listing", "Listing_Presence_Status", "Possible_Issue", "Suggested_Action", "Priority", "Last_Updated"]),
         ("Confidence", confidence_df, ["FSN", "SKU_ID", "Product_Title", "Overall_Confidence_Score", "Overall_Confidence_Status", "Primary_Data_Gap", "Suggested_Data_Action", "COGS_Confidence_Status", "Ads_Confidence_Status", "Format_Confidence_Status", "Alert_Risk_Status", "Last_Updated"]),
         ("Competitor", competitor_df, ["FSN", "SKU_ID", "Product_Title", "Comparable_Competitor_Count", "Median_Comparable_Competitor_Unit_Price", "Price_Gap_Percent", "Competition_Risk_Score", "Competition_Risk_Level", "Suggested_Action", "Confidence", "Last_Updated"]),
@@ -1990,13 +2094,34 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
             preferred_columns=["FSN", "SKU_ID", "Product_Title", "Comparable_Competitor_Count", "Median_Comparable_Competitor_Unit_Price", "Price_Gap_Percent", "Competition_Risk_Score", "Competition_Risk_Level", "Competitor_Insight", "Suggested_Action", "Confidence", "Last_Updated"],
             style_columns={"Competition_Risk_Level": RISK_PALETTE, "Confidence": CONFIDENCE_PALETTE},
         )
+    render_dataframe_section(
+        "Return Type Pivot",
+        return_type_pivot_df,
+        "flipkart_fsn_return_type_pivot.csv",
+        preferred_columns=["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Customer_Return_Count", "Courier_Return_Count", "Unknown_Return_Count", "Total_Return_Count", "Customer_Return_Rate", "Courier_Return_Rate", "Total_Return_Rate", "Customer_vs_Courier_Mix", "Dominant_Return_Type", "Last_Updated"],
+        style_columns={"Customer_vs_Courier_Mix": STATUS_PALETTE, "Dominant_Return_Type": STATUS_PALETTE},
+    )
+    render_dataframe_section(
+        "Order Item Master for Selected FSN",
+        order_item_master_df,
+        "flipkart_fsn_order_item_master.csv",
+        preferred_columns=["Run_ID", "Order_ID", "Order_Item_ID", "Master_Order_Key", "FSN", "SKU_ID", "Product_Title", "Order_Date", "Latest_Event_Date", "Selling_Price", "Settlement_Amount", "Net_Profit", "Return_YN", "Return_Type_Final", "Customer_Return_YN", "Courier_Return_YN", "Data_Completeness_Status", "Data_Gap_Reason", "Last_Updated"],
+        style_columns={"Return_YN": STATUS_PALETTE, "Customer_Return_YN": STATUS_PALETTE, "Courier_Return_YN": STATUS_PALETTE},
+    )
+    with st.expander("Order Item source detail for selected FSN", expanded=False):
         render_dataframe_section(
-            "Return Type Pivot",
-            return_type_pivot_df,
-            "flipkart_fsn_return_type_pivot.csv",
-            preferred_columns=["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Customer_Return_Count", "Courier_Return_Count", "Unknown_Return_Count", "Total_Return_Count", "Customer_Return_Rate", "Courier_Return_Rate", "Total_Return_Rate", "Customer_vs_Courier_Mix", "Dominant_Return_Type", "Last_Updated"],
-            style_columns={"Customer_vs_Courier_Mix": STATUS_PALETTE, "Dominant_Return_Type": STATUS_PALETTE},
+            "Order Item Source Detail",
+            order_item_source_detail_df,
+            "flipkart_fsn_order_item_source_detail.csv",
+            preferred_columns=["Source_File", "Source_Tab", "Source_Row_Type", "Order_ID", "Order_Item_ID", "Return_ID", "FSN", "SKU_ID", "Product_Title", "Order_Date", "Settlement_Date", "Return_Date", "Quantity", "Selling_Price", "Settlement_Amount", "Net_Profit", "Return_Type", "Customer_Return_YN", "Courier_Return_YN", "Return_Status", "Return_Reason", "Return_Sub_Reason", "Alert_Count", "Critical_Alert_Count", "Final_Ads_Decision", "Competition_Risk_Level", "Data_Gap_Reason", "Last_Updated"],
+            style_columns={"Source_Row_Type": STATUS_PALETTE, "Return_Type": STATUS_PALETTE, "Customer_Return_YN": STATUS_PALETTE, "Courier_Return_YN": STATUS_PALETTE},
         )
+    if not order_item_master_df.empty:
+        copy_cols = st.columns(2)
+        with copy_cols[0]:
+            st.text_area("Order Item IDs", value="\n".join(dict.fromkeys(value for value in order_item_master_df.get("Order_Item_ID", pd.Series(dtype="object")).fillna("").astype(str).tolist() if normalize_text(value))), height=180, key="fsn_deep_dive_order_item_ids")
+        with copy_cols[1]:
+            st.text_area("Return IDs", value="\n".join(dict.fromkeys(value for value in order_item_master_df.get("Return_IDs", pd.Series(dtype="object")).fillna("").astype(str).tolist() if normalize_text(value))), height=180, key="fsn_deep_dive_return_ids")
 
 
 def render_sidebar(data: Dict[str, Any], default_page: str) -> tuple[str, Dict[str, str]]:

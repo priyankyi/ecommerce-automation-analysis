@@ -39,6 +39,8 @@ TABS_TO_CHECK = [
     "FLIPKART_RUN_HISTORY",
     "FLIPKART_FSN_HISTORY",
     "FLIPKART_ORDER_ITEM_EXPLORER",
+    "FLIPKART_ORDER_ITEM_MASTER",
+    "FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
     "FLIPKART_ADJUSTMENTS_LEDGER",
     "FLIPKART_ADJUSTED_PROFIT",
     "FLIPKART_RUN_COMPARISON",
@@ -55,6 +57,8 @@ TABS_TO_CHECK = [
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
     "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
     "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
+    "LOOKER_FLIPKART_ORDER_ITEM_MASTER",
+    "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
 ]
 
 
@@ -196,6 +200,8 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     ads_planner_rows = tables["FLIPKART_ADS_PLANNER"][1]
     missing_listing_rows = tables["FLIPKART_MISSING_ACTIVE_LISTINGS"][1]
     order_item_rows = tables["FLIPKART_ORDER_ITEM_EXPLORER"][1]
+    order_item_master_rows = tables["FLIPKART_ORDER_ITEM_MASTER"][1]
+    order_item_source_detail_rows = tables["FLIPKART_ORDER_ITEM_SOURCE_DETAIL"][1]
     return_issue_rows = tables["FLIPKART_RETURN_ISSUE_SUMMARY"][1]
     return_all_details_rows = tables["FLIPKART_RETURN_ALL_DETAILS"][1]
     customer_return_rows = tables["FLIPKART_CUSTOMER_RETURN_COMMENTS"][1]
@@ -217,6 +223,8 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     competitor_result_rows = tables["FLIPKART_VISUAL_COMPETITOR_RESULTS"][1]
     competitor_price_rows = tables["FLIPKART_COMPETITOR_PRICE_INTELLIGENCE"][1]
     looker_order_item_rows = tables["LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"][1]
+    looker_order_item_master_rows = tables["LOOKER_FLIPKART_ORDER_ITEM_MASTER"][1]
+    looker_order_item_source_detail_rows = tables["LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL"][1]
     row_counts = {tab_name: row_count(rows_data) for tab_name, (_, rows_data) in tables.items()}
 
     run_quality_score_value = 0.0
@@ -236,6 +244,10 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     unknown_return_count = sum(1 for row in return_all_details_rows if normalize_text(row.get("Return_Bucket", "")) == "unknown_return")
     critical_customer_return_fsn_count = sum(1 for row in customer_summary_rows if normalize_text(row.get("Customer_Return_Risk_Level", "")) == "Critical")
     high_courier_return_fsn_count = sum(1 for row in courier_summary_rows if normalize_text(row.get("Courier_Return_Risk_Level", "")) == "High")
+    order_item_master_blank_fsn_count = sum(1 for row in order_item_master_rows if not normalize_text(row.get("FSN", "")))
+    order_item_source_detail_blank_fsn_count = sum(1 for row in order_item_source_detail_rows if not normalize_text(row.get("FSN", "")))
+    order_item_master_missing_profit_count = sum(1 for row in order_item_master_rows if not normalize_text(row.get("Net_Profit", "")))
+    order_item_master_order_only_count = sum(1 for row in order_item_master_rows if not normalize_text(row.get("Order_Item_ID", "")) and normalize_text(row.get("Order_ID", "")))
 
     warnings: List[str] = []
     if keyword_cache_total_count == 0:
@@ -246,6 +258,14 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         warnings.append("competitor intelligence contains Not Enough Data rows")
     if report_format_critical_issue_count > 0:
         warnings.append("report format critical issues present")
+    if order_item_master_blank_fsn_count > 0:
+        warnings.append("order item master has blank FSN rows")
+    if order_item_source_detail_blank_fsn_count > 0:
+        warnings.append("order item source detail has blank FSN rows")
+    if order_item_master_missing_profit_count > 0:
+        warnings.append("order item master has missing profit rows")
+    if order_item_master_order_only_count > 0:
+        warnings.append("order-only fallback rows are present")
     if "FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs:
         warnings.append("order item explorer source tab is missing")
     elif not order_item_rows:
@@ -254,6 +274,22 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         warnings.append("looker order item explorer tab is missing")
     elif not looker_order_item_rows:
         warnings.append("looker order item explorer tab is empty")
+    if "FLIPKART_ORDER_ITEM_MASTER" not in available_tabs:
+        warnings.append("order item master tab is missing")
+    elif not order_item_master_rows:
+        warnings.append("order item master tab is empty")
+    if "FLIPKART_ORDER_ITEM_SOURCE_DETAIL" not in available_tabs:
+        warnings.append("order item source detail tab is missing")
+    elif not order_item_source_detail_rows:
+        warnings.append("order item source detail tab is empty")
+    if "LOOKER_FLIPKART_ORDER_ITEM_MASTER" not in available_tabs:
+        warnings.append("looker order item master tab is missing")
+    elif not looker_order_item_master_rows:
+        warnings.append("looker order item master tab is empty")
+    if "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL" not in available_tabs:
+        warnings.append("looker order item source detail tab is missing")
+    elif not looker_order_item_source_detail_rows:
+        warnings.append("looker order item source detail tab is empty")
 
     optional_zero_row_tabs = {
         "FLIPKART_ADJUSTMENTS_LEDGER",
@@ -262,6 +298,8 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         "FLIPKART_COMPETITOR_SEARCH_QUEUE",
         "FLIPKART_VISUAL_COMPETITOR_RESULTS",
         "FLIPKART_ORDER_ITEM_EXPLORER",
+        "FLIPKART_ORDER_ITEM_MASTER",
+        "FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
     }
     required_row_tabs = [tab_name for tab_name in TABS_TO_CHECK if tab_name not in optional_zero_row_tabs]
 
@@ -330,12 +368,28 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         "report_format_issues_tab_exists": "FLIPKART_REPORT_FORMAT_ISSUES" not in missing_tabs,
         "adjustments_ledger_tab_exists": "FLIPKART_ADJUSTMENTS_LEDGER" not in missing_tabs,
         "order_item_explorer_has_rows": ("FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs) or row_counts["FLIPKART_ORDER_ITEM_EXPLORER"] > 0,
+        "order_item_master_has_rows": ("FLIPKART_ORDER_ITEM_MASTER" not in available_tabs) or row_counts["FLIPKART_ORDER_ITEM_MASTER"] > 0,
+        "order_item_source_detail_has_rows": ("FLIPKART_ORDER_ITEM_SOURCE_DETAIL" not in available_tabs) or row_counts["FLIPKART_ORDER_ITEM_SOURCE_DETAIL"] > 0,
         "looker_order_item_explorer_has_rows": ("LOOKER_FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs) or row_counts["LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"] > 0,
+        "looker_order_item_master_has_rows": ("LOOKER_FLIPKART_ORDER_ITEM_MASTER" not in available_tabs) or row_counts["LOOKER_FLIPKART_ORDER_ITEM_MASTER"] > 0,
+        "looker_order_item_source_detail_has_rows": ("LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL" not in available_tabs) or row_counts["LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL"] > 0,
         "customer_return_rate_source_is_customer_only": customer_only_rows == row_counts["FLIPKART_CUSTOMER_RETURN_COMMENTS"],
         "courier_return_rate_source_is_courier_only": courier_only_rows == row_counts["FLIPKART_COURIER_RETURN_COMMENTS"],
     }
 
-    required_missing_tabs = [tab_name for tab_name in missing_tabs if tab_name not in {"FLIPKART_ORDER_ITEM_EXPLORER", "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"}]
+    required_missing_tabs = [
+        tab_name
+        for tab_name in missing_tabs
+        if tab_name
+        not in {
+            "FLIPKART_ORDER_ITEM_EXPLORER",
+            "FLIPKART_ORDER_ITEM_MASTER",
+            "FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
+            "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
+            "LOOKER_FLIPKART_ORDER_ITEM_MASTER",
+            "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
+        }
+    ]
     checks["all_required_tabs_present"] = not required_missing_tabs
 
     status = "PASS_WITH_WARNINGS" if all(checks.values()) and warnings else ("PASS" if all(checks.values()) else "FAIL")

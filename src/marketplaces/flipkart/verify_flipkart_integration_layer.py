@@ -19,6 +19,8 @@ from src.marketplaces.flipkart.create_looker_studio_sources import (
     LOOKER_DEMAND_PROFILE_TAB,
     LOOKER_MODULE_CONFIDENCE_TAB,
     LOOKER_ORDER_ITEM_EXPLORER_TAB,
+    LOOKER_ORDER_ITEM_MASTER_TAB,
+    LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB,
     LOOKER_REPORT_FORMAT_MONITOR_TAB,
     LOOKER_RUN_COMPARISON_TAB,
     LOOKER_RUN_QUALITY_TAB,
@@ -57,6 +59,8 @@ KEY_GENERATED_TABS = [
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
     "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
     "FLIPKART_ORDER_ITEM_EXPLORER",
+    "FLIPKART_ORDER_ITEM_MASTER",
+    "FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
 ]
 
 LOOKER_TABS_FOR_INTEGRATION = [
@@ -68,6 +72,8 @@ LOOKER_TABS_FOR_INTEGRATION = [
     LOOKER_DEMAND_PROFILE_TAB,
     LOOKER_COMPETITOR_INTELLIGENCE_TAB,
     LOOKER_ORDER_ITEM_EXPLORER_TAB,
+    LOOKER_ORDER_ITEM_MASTER_TAB,
+    LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB,
     "LOOKER_FLIPKART_RETURN_ALL_DETAILS",
     "LOOKER_FLIPKART_CUSTOMER_RETURNS",
     "LOOKER_FLIPKART_COURIER_RETURNS",
@@ -242,6 +248,10 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         "competitor_intelligence_has_rows",
         "order_item_explorer_has_rows",
         "looker_order_item_explorer_has_rows",
+        "order_item_master_has_rows",
+        "order_item_source_detail_has_rows",
+        "looker_order_item_master_has_rows",
+        "looker_order_item_source_detail_has_rows",
         "return_all_details_has_rows",
         "customer_return_summary_has_rows",
         "courier_return_summary_has_rows",
@@ -273,6 +283,9 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         "FLIPKART_COMPETITOR_SEARCH_QUEUE": count_rows(competitor_queue_rows),
         "FLIPKART_VISUAL_COMPETITOR_RESULTS": count_rows(visual_results_rows),
         "GOOGLE_KEYWORD_METRICS_CACHE": count_rows(keyword_cache_rows),
+        "FLIPKART_ORDER_ITEM_EXPLORER": count_rows(table("FLIPKART_ORDER_ITEM_EXPLORER")),
+        "FLIPKART_ORDER_ITEM_MASTER": count_rows(table("FLIPKART_ORDER_ITEM_MASTER")),
+        "FLIPKART_ORDER_ITEM_SOURCE_DETAIL": count_rows(table("FLIPKART_ORDER_ITEM_SOURCE_DETAIL")),
         LOOKER_RUN_COMPARISON_TAB: count_rows(table(LOOKER_RUN_COMPARISON_TAB)),
         LOOKER_ADJUSTED_PROFIT_TAB: count_rows(table(LOOKER_ADJUSTED_PROFIT_TAB)),
         LOOKER_REPORT_FORMAT_MONITOR_TAB: count_rows(table(LOOKER_REPORT_FORMAT_MONITOR_TAB)),
@@ -280,6 +293,9 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         LOOKER_MODULE_CONFIDENCE_TAB: count_rows(table(LOOKER_MODULE_CONFIDENCE_TAB)),
         LOOKER_DEMAND_PROFILE_TAB: count_rows(table(LOOKER_DEMAND_PROFILE_TAB)),
         LOOKER_COMPETITOR_INTELLIGENCE_TAB: count_rows(table(LOOKER_COMPETITOR_INTELLIGENCE_TAB)),
+        LOOKER_ORDER_ITEM_EXPLORER_TAB: count_rows(table(LOOKER_ORDER_ITEM_EXPLORER_TAB)),
+        LOOKER_ORDER_ITEM_MASTER_TAB: count_rows(table(LOOKER_ORDER_ITEM_MASTER_TAB)),
+        LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB: count_rows(table(LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB)),
     }
 
     looker_tabs_exist = all(tab in available_tabs for tab in looker_required_tabs)
@@ -307,6 +323,12 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         "adjusted_profit_has_rows": adjusted_profit_has_rows,
         "report_format_monitor_has_rows": report_format_monitor_has_rows,
         "demand_profile_has_rows": demand_profile_has_rows,
+        "order_item_explorer_has_rows": row_counts["FLIPKART_ORDER_ITEM_EXPLORER"] > 0 and row_counts[LOOKER_ORDER_ITEM_EXPLORER_TAB] > 0,
+        "order_item_master_has_rows": row_counts["FLIPKART_ORDER_ITEM_MASTER"] > 0 and row_counts[LOOKER_ORDER_ITEM_MASTER_TAB] > 0,
+        "order_item_source_detail_has_rows": row_counts["FLIPKART_ORDER_ITEM_SOURCE_DETAIL"] > 0 and row_counts[LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB] > 0,
+        "looker_order_item_explorer_has_rows": row_counts[LOOKER_ORDER_ITEM_EXPLORER_TAB] > 0,
+        "looker_order_item_master_has_rows": row_counts[LOOKER_ORDER_ITEM_MASTER_TAB] > 0,
+        "looker_order_item_source_detail_has_rows": row_counts[LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB] > 0,
     }
 
     status = "PASS_WITH_WARNINGS" if all(checks.values()) and warnings else ("PASS" if all(checks.values()) else "FAIL")

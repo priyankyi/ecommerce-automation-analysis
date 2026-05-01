@@ -24,6 +24,7 @@ Open the Google Sheet and check these tabs first:
 - `FLIPKART_DASHBOARD`
 - `FLIPKART_ACTIVE_TASKS`
 - `FLIPKART_ACTION_TRACKER`
+- `FLIPKART_ORDER_ITEM_MASTER`
 - `FLIPKART_RETURN_ALL_DETAILS`
 - `FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY`
 - `FLIPKART_COURIER_RETURN_SUMMARY`
@@ -61,7 +62,13 @@ Use the courier return tabs for logistics review:
 Use `FLIPKART_RETURN_TYPE_PIVOT` to compare the mix.
 Do not use courier returns to measure product quality or to block ads by themselves.
 
-## 5. Daily refresh command
+## 5. Order ID lookup
+
+Use `FLIPKART_ORDER_ITEM_MASTER` for day-to-day copy and search work.
+
+Use `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` only when you need to trace why a value differs across orders, returns, settlement, PNL, or return-intelligence rows.
+
+## 6. Daily refresh command
 
 Use:
 
@@ -69,11 +76,11 @@ Use:
 .\run_flipkart_quick_refresh.ps1
 ```
 
-## 6. Monthly full report process
+## 7. Monthly full report process
 
-Use the `Monthly Raw File Replacement SOP` in section 12 before any full refresh.
+Use the `Monthly Raw File Replacement SOP` in section 14 before any full refresh.
 
-## 7. COGS update process
+## 8. COGS update process
 
 Use this when the cost team updates pricing.
 
@@ -84,7 +91,7 @@ Use this when the cost team updates pricing.
 .\run_flipkart_cogs_refresh.ps1
 ```
 
-## 8. Competitor visual search process
+## 9. Competitor visual search process
 
 Use this only for a small batch of selected FSNs.
 
@@ -93,7 +100,7 @@ Use this only for a small batch of selected FSNs.
 3. Do not use `--force` repeatedly
 4. Check `FLIPKART_COMPETITOR_PRICE_INTELLIGENCE`
 
-## 9. Action tracker process
+## 10. Action tracker process
 
 Update these fields in `FLIPKART_ACTION_TRACKER`:
 - `Owner`
@@ -107,27 +114,27 @@ Then run:
 .\run_flipkart_actions_refresh.ps1
 ```
 
-## 10. Google Keyword Planner status
+## 11. Google Keyword Planner status
 
 - Currently pending Basic Access
 - The system works without it
 - Once approved, run keyword refresh manually
 
-## 11. Common warnings and meaning
+## 12. Common warnings and meaning
 
 - `CACHE_EMPTY` = Google Ads approval pending
 - keyword cache pending = normal until Google approval
 - `Not Enough Data` competitor = image or search data missing
 - Google Sheets 429 = wait 5 minutes and rerun
 
-## 12. Emergency recovery
+## 13. Emergency recovery
 
 - Code backup is on GitHub
 - Run archives are in Google Drive
 - Credentials are local only
 - Do not delete the `credentials` folder
 
-## 13. Monthly Raw File Replacement SOP
+## 14. Monthly Raw File Replacement SOP
 
 This is the safest way to replace raw Flipkart files each month.
 

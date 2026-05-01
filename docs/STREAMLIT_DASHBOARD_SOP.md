@@ -55,6 +55,7 @@ Use `Return Comments Explorer` when you need to search by:
 - comment text
 
 Use `Order ID Explorer` when you need a copy-friendly table for Flipkart support checks.
+The page uses `LOOKER_FLIPKART_ORDER_ITEM_MASTER` first and keeps `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` as the audit view.
 
 ## Warnings
 
@@ -75,6 +76,7 @@ Use `Order ID Explorer` when you need a copy-friendly table for Flipkart support
 - Do not touch other marketplaces.
 - Do not expose credentials.
 - Use `Order ID Explorer` to copy `Order_ID` and `Order_Item_ID` for manual Flipkart checks.
+- Use the master table first. Use the source detail tab only when you need to audit where a value came from.
 - Use `Customer Returns` for product-quality review and `Courier Returns` for logistics review.
 - Do not use courier return rates alone to block ads or label a product as defective.
 - If order IDs are missing, check whether the raw order report or normalized order layer is available before editing anything.
@@ -106,6 +108,8 @@ The dashboard reads these read-only source tabs:
 - `LOOKER_FLIPKART_DEMAND_PROFILE`
 - `LOOKER_FLIPKART_COMPETITOR_INTELLIGENCE`
 - `LOOKER_FLIPKART_ORDER_ITEM_EXPLORER`
+- `LOOKER_FLIPKART_ORDER_ITEM_MASTER`
+- `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL`
 - `LOOKER_FLIPKART_RETURN_ALL_DETAILS`
 - `LOOKER_FLIPKART_CUSTOMER_RETURNS`
 - `LOOKER_FLIPKART_COURIER_RETURNS`
@@ -116,6 +120,8 @@ The dashboard reads these read-only source tabs:
 - `FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY`
 - `FLIPKART_COURIER_RETURN_SUMMARY`
 - `FLIPKART_RETURN_TYPE_PIVOT`
+- `FLIPKART_ORDER_ITEM_MASTER`
+- `FLIPKART_ORDER_ITEM_SOURCE_DETAIL`
 - `FLIPKART_MISSING_ACTIVE_LISTINGS`
 - `FLIPKART_FSN_RUN_COMPARISON`
 - `FLIPKART_VISUAL_COMPETITOR_RESULTS`

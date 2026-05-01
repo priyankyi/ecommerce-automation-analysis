@@ -489,7 +489,11 @@ def load_dashboard_payload() -> Dict[str, Any]:
             "FLIPKART_FSN_RUN_COMPARISON",
             "FLIPKART_VISUAL_COMPETITOR_RESULTS",
             "FLIPKART_ORDER_ITEM_EXPLORER",
+            "FLIPKART_ORDER_ITEM_MASTER",
+            "FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
             "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
+            "LOOKER_FLIPKART_ORDER_ITEM_MASTER",
+            "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
         ]:
             if tab_name in available_tabs:
                 frames[tab_name] = read_tab_dataframe(sheets_service, spreadsheet_id, tab_name)

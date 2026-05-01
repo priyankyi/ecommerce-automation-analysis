@@ -299,6 +299,11 @@ Fix Return Intelligence v2 so it correctly extracts Order_ID and Order_Item_ID, 
 - Return Intelligence v2 parsing, deduplication, and quick-refresh recovery are complete and verified
 - The order item explorer now consumes `FLIPKART_RETURN_ALL_DETAILS`, `FLIPKART_CUSTOMER_RETURN_COMMENTS`, `FLIPKART_COURIER_RETURN_COMMENTS`, and `FLIPKART_RETURN_TYPE_PIVOT`
 - Quick refresh now completes with warnings only and no failing step
+- Business logic is corrected so customer return rate uses `customer_return` only, courier return rate is tracked separately, and courier returns do not directly drive product-quality or Do Not Run Ads decisions
+- `Order_ID` and `Order_Item_ID` are now available for Flipkart manual checking
+- Latest order item explorer validation: `status=SUCCESS`, `order_item_rows=8115`, `order_id_present_count=6798`, `order_item_id_present_count=7397`, `duplicate_order_item_id_count=1164`, `blank_fsn_count=241`
+- Remaining improvement: the order item explorer still combines multiple sources and should later be simplified into one master row per `Order_Item_ID` plus source-level detail
+- Latest return intelligence outputs are now the decision source for customer and courier return analysis, while order-item lookup remains useful for manual checks
 - App must support Streamlit Cloud secrets while still working locally
 - Keep warnings visible only for spreadsheet disconnects, missing tabs, and quota issues in the production sidebar; hide auth internals unless `DASHBOARD_DEBUG=true`
 - Streamlit UX cleanup plus order-item explorer support is complete and verified; the dashboard remains read-only, Flipkart-only, and source-driven
@@ -371,6 +376,36 @@ Fix Return Intelligence v2 so it correctly extracts Order_ID and Order_Item_ID, 
 - Upgrade 5 result: `fsns_with_adjustments=0`, `net_adjustment=0`, `verification status=PASS`
 - Phase 26 - Streamlit Cloud Deployment Readiness is complete and verified
 - Streamlit dashboard deliverables: the 12-page operating UI, return-intelligence views, useful filters, color-coded risk/status, clear incomplete-data warnings, and safe download/export actions
+
+## Phase 30 - Order ID Explorer v2 cleanup
+
+### Goal
+Split the current order-item explorer into two clean layers so the team gets one master row per `Order_Item_ID` for copy/search work, while keeping a source-detail layer for audit and debugging.
+
+### Latest Result
+- `FLIPKART_ORDER_ITEM_EXPLORER` now remains as the legacy compatibility view, while `FLIPKART_ORDER_ITEM_MASTER` and `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` are the new canonical order-item layers
+- Latest order-item explorer rebuild: `status=PASS_WITH_WARNINGS`, `master_rows=6233`, `source_detail_rows=15660`, `legacy_explorer_rows=8115`, `duplicate_order_item_id_count_master=0`
+- Latest order-item explorer warnings: `blank_fsn_count_master=94`, `source_detail_blank_fsn_count=292`, `order_only_fallback_count=0`
+- Latest quick refresh result: `status=SUCCESS_WITH_WARNINGS`, `failed_step=null`, `verification_passed=true`, `steps_run=create_flipkart_order_item_explorer -> create_looker_studio_sources -> verify_flipkart_integration_layer -> verify_flipkart_system_health`
+- Streamlit `Order ID Explorer` now prefers `LOOKER_FLIPKART_ORDER_ITEM_MASTER` and keeps `LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL` as the audit sidecar
+
+### Success Criteria
+- Create `FLIPKART_ORDER_ITEM_MASTER` with one row per non-blank `Order_Item_ID`
+- Create `FLIPKART_ORDER_ITEM_SOURCE_DETAIL` with all source-level rows preserved
+- Duplicate `Order_Item_ID` count in the master should be `0`
+- Streamlit `Order ID Explorer` should show master rows first
+- `FSN Deep Dive` should use the master plus source detail where useful
+- Dashboard remains read-only, Flipkart-only, and source-driven
+
+### Guardrails
+- Do not run the full Flipkart pipeline
+- Do not call external APIs
+- Do not touch `MASTER_SKU`
+- Do not touch other marketplaces
+- Do not expose credentials
+- Do not fabricate `Order_ID`, `Order_Item_ID`, `Return_ID`, `FSN`, `SKU`, or comments
+- Preserve IDs as text and never convert them to scientific notation
+- Keep the dashboard read-only
 - Current production features:
   - one-command PowerShell wrapper works
   - Python runner remains the underlying execution path

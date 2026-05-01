@@ -43,10 +43,18 @@ from src.marketplaces.flipkart.flipkart_utils import (
 
 SPREADSHEET_META_PATH = PROJECT_ROOT / "data" / "output" / "master_sku_sheet.json"
 LOG_PATH = LOG_DIR / "flipkart_order_item_explorer_log.csv"
-LOCAL_ORDER_ITEM_PATH = OUTPUT_DIR / "flipkart_order_item_explorer.csv"
-LOCAL_LOOKER_PATH = OUTPUT_DIR / "looker_flipkart_order_item_explorer.csv"
+LOCAL_LEGACY_ORDER_ITEM_PATH = OUTPUT_DIR / "flipkart_order_item_explorer.csv"
+LOCAL_LEGACY_LOOKER_PATH = OUTPUT_DIR / "looker_flipkart_order_item_explorer.csv"
+LOCAL_MASTER_PATH = OUTPUT_DIR / "flipkart_order_item_master.csv"
+LOCAL_SOURCE_DETAIL_PATH = OUTPUT_DIR / "flipkart_order_item_source_detail.csv"
+LOCAL_LOOKER_MASTER_PATH = OUTPUT_DIR / "looker_flipkart_order_item_master.csv"
+LOCAL_LOOKER_SOURCE_DETAIL_PATH = OUTPUT_DIR / "looker_flipkart_order_item_source_detail.csv"
 ORDER_ITEM_TAB = "FLIPKART_ORDER_ITEM_EXPLORER"
 LOOKER_ORDER_ITEM_TAB = "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"
+ORDER_ITEM_MASTER_TAB = "FLIPKART_ORDER_ITEM_MASTER"
+ORDER_ITEM_SOURCE_DETAIL_TAB = "FLIPKART_ORDER_ITEM_SOURCE_DETAIL"
+LOOKER_ORDER_ITEM_MASTER_TAB = "LOOKER_FLIPKART_ORDER_ITEM_MASTER"
+LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB = "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL"
 RETURN_TYPE_PIVOT_TAB = "FLIPKART_RETURN_TYPE_PIVOT"
 
 LOCAL_CSV_SOURCES: Dict[str, Path] = {
@@ -120,6 +128,112 @@ OUTPUT_HEADERS = [
     "Source_File",
     "Last_Updated",
 ]
+
+ORDER_ITEM_SOURCE_DETAIL_HEADERS = [
+    "Run_ID",
+    "Source_File",
+    "Source_Tab",
+    "Source_Row_Type",
+    "Order_ID",
+    "Order_Item_ID",
+    "Return_ID",
+    "FSN",
+    "SKU_ID",
+    "Product_Title",
+    "Order_Date",
+    "Dispatch_Date",
+    "Delivery_Date",
+    "Settlement_Date",
+    "Return_Date",
+    "Quantity",
+    "Selling_Price",
+    "Settlement_Amount",
+    "Commission",
+    "Shipping_Fee",
+    "Other_Fees",
+    "Total_Deductions",
+    "Cost_Price",
+    "COGS",
+    "Net_Profit",
+    "Profit_Margin",
+    "Return_Type",
+    "Customer_Return_YN",
+    "Courier_Return_YN",
+    "Return_Status",
+    "Return_Reason",
+    "Return_Sub_Reason",
+    "Customer_Issue_Category",
+    "Courier_Issue_Category",
+    "Customer_Return_Risk_Level",
+    "Courier_Return_Risk_Level",
+    "Alert_Count",
+    "Critical_Alert_Count",
+    "Final_Ads_Decision",
+    "Competition_Risk_Level",
+    "Data_Gap_Reason",
+    "Last_Updated",
+]
+
+ORDER_ITEM_MASTER_HEADERS = [
+    "Run_ID",
+    "Order_ID",
+    "Order_Item_ID",
+    "Master_Order_Key",
+    "FSN",
+    "SKU_ID",
+    "Product_Title",
+    "Order_Date",
+    "Latest_Event_Date",
+    "Quantity",
+    "Selling_Price",
+    "Settlement_Amount",
+    "Total_Deductions",
+    "Cost_Price",
+    "COGS",
+    "Net_Profit",
+    "Profit_Margin",
+    "Return_YN",
+    "Return_IDs",
+    "Return_Type_Final",
+    "Customer_Return_YN",
+    "Courier_Return_YN",
+    "Return_Status_Final",
+    "Return_Reason_Final",
+    "Return_Sub_Reason_Final",
+    "Customer_Issue_Category",
+    "Courier_Issue_Category",
+    "Customer_Return_Risk_Level",
+    "Courier_Return_Risk_Level",
+    "Alert_Count",
+    "Critical_Alert_Count",
+    "Final_Ads_Decision",
+    "Competition_Risk_Level",
+    "Source_Row_Count",
+    "Sources_Present",
+    "Data_Completeness_Status",
+    "Data_Gap_Reason",
+    "Last_Updated",
+]
+
+SOURCE_PRIORITY = {
+    "Orders.xlsx": 1,
+    "Returns Report.csv": 2,
+    "Returns.xlsx": 3,
+    "Settled Transactions.xlsx": 4,
+    "PNL.xlsx": 5,
+    "flipkart_return_all_details.csv": 6,
+    "flipkart_customer_return_comments.csv": 6,
+    "flipkart_courier_return_comments.csv": 6,
+    "flipkart_customer_return_issue_summary.csv": 6,
+    "flipkart_courier_return_summary.csv": 6,
+    "flipkart_return_type_pivot.csv": 6,
+    "flipkart_return_comments.csv": 6,
+    "flipkart_ads_final_recommendations.csv": 6,
+    "flipkart_ads_planner.csv": 6,
+    "flipkart_competitor_price_intelligence.csv": 6,
+    "alert": 7,
+    "unknown": 9,
+}
 
 
 def retry(func, attempts: int = 4):
@@ -475,6 +589,345 @@ def build_alert_counts(alert_rows: Sequence[Dict[str, Any]]) -> Dict[str, Dict[s
     return counts
 
 
+def source_rank(source_file: str, row_type: str) -> int:
+    if row_type == "alert":
+        return SOURCE_PRIORITY["alert"]
+    return SOURCE_PRIORITY.get(source_file, SOURCE_PRIORITY["unknown"])
+
+
+def pick_text(row: Dict[str, Any], *fields: str) -> str:
+    for field in fields:
+        value = text_value(row.get(field, ""))
+        if value:
+            return value
+    return ""
+
+
+def order_item_master_key(row: Dict[str, Any]) -> str:
+    order_item_id = text_value(row.get("Order_Item_ID", ""))
+    if order_item_id:
+        return order_item_id
+    order_id = text_value(row.get("Order_ID", ""))
+    fsn = text_value(row.get("FSN", ""))
+    sku_id = text_value(row.get("SKU_ID", ""))
+    if order_id:
+        return f"ORDER_ONLY::{order_id}::{fsn}::{sku_id}"
+    return ""
+
+
+def build_source_detail_row(
+    row: Dict[str, Any],
+    *,
+    run_id: str,
+    source_file: str,
+    source_tab: str,
+    row_type: str,
+    alert_counts: Dict[str, Dict[str, int]],
+) -> Dict[str, Any]:
+    source_row: Dict[str, Any] = {header: "" for header in ORDER_ITEM_SOURCE_DETAIL_HEADERS}
+    source_row["Run_ID"] = run_id
+    source_row["Source_File"] = source_file
+    source_row["Source_Tab"] = source_tab
+    source_row["Source_Row_Type"] = row_type
+    source_row["Order_ID"] = pick_text(row, "Order_ID", "order_id")
+    source_row["Order_Item_ID"] = pick_text(row, "Order_Item_ID", "order_item_id")
+    source_row["Return_ID"] = pick_text(row, "Return_ID", "return_id", "ReturnId")
+    source_row["FSN"] = clean_fsn(row.get("FSN", ""))
+    source_row["SKU_ID"] = pick_text(row, "SKU_ID", "Seller_SKU", "SellerSku", "SKU", "Sku Id")
+    source_row["Product_Title"] = pick_text(row, "Product_Title", "Product Name", "Title", "Product")
+    source_row["Order_Date"] = pick_text(row, "Order_Date", "Order Date")
+    source_row["Dispatch_Date"] = pick_text(row, "Dispatch_Date", "Dispatch Date")
+    source_row["Delivery_Date"] = pick_text(row, "Delivery_Date", "Delivery Date")
+    source_row["Settlement_Date"] = pick_text(row, "Settlement_Date", "Settlement Date")
+    source_row["Return_Date"] = pick_text(row, "Return_Date", "Return Date")
+    source_row["Quantity"] = pick_text(row, "Quantity", "Qty")
+    source_row["Selling_Price"] = pick_text(row, "Selling_Price", "Selling Price", "Sale Price")
+    source_row["Settlement_Amount"] = pick_text(row, "Settlement_Amount", "Net_Settlement", "Net Settlement", "Amount_Settled", "Amount Settled")
+    source_row["Commission"] = pick_text(row, "Commission", "Commission Fee")
+    source_row["Shipping_Fee"] = pick_text(row, "Shipping_Fee", "Shipping Fee")
+    source_row["Other_Fees"] = pick_text(row, "Other_Fees", "Other Fees")
+    source_row["Total_Deductions"] = pick_text(row, "Total_Deductions", "Total Deductions")
+    source_row["Cost_Price"] = pick_text(row, "Cost_Price", "Unit Cost")
+    source_row["COGS"] = pick_text(row, "COGS", "Total_COGS", "Total COGS")
+    source_row["Net_Profit"] = pick_text(row, "Net_Profit", "Final_Net_Profit", "Flipkart_Net_Earnings", "Net Profit")
+    source_row["Profit_Margin"] = pick_text(row, "Profit_Margin", "Final_Profit_Margin", "Profit Margin")
+    source_row["Return_Type"] = pick_text(row, "Return_Type", "Return_Bucket", "Dominant_Return_Type")
+    source_row["Customer_Return_YN"] = pick_text(row, "Customer_Return_YN")
+    source_row["Courier_Return_YN"] = pick_text(row, "Courier_Return_YN")
+    source_row["Return_Status"] = pick_text(row, "Return_Status", "Status")
+    source_row["Return_Reason"] = pick_text(row, "Return_Reason", "Reason")
+    source_row["Return_Sub_Reason"] = pick_text(row, "Return_Sub_Reason", "Sub_Reason")
+    source_row["Customer_Issue_Category"] = pick_text(row, "Customer_Issue_Category")
+    source_row["Courier_Issue_Category"] = pick_text(row, "Courier_Issue_Category")
+    source_row["Customer_Return_Risk_Level"] = pick_text(row, "Customer_Return_Risk_Level")
+    source_row["Courier_Return_Risk_Level"] = pick_text(row, "Courier_Return_Risk_Level")
+    source_row["Final_Ads_Decision"] = pick_text(row, "Final_Ads_Decision", "Suggested_Ad_Action")
+    source_row["Competition_Risk_Level"] = pick_text(row, "Competition_Risk_Level")
+    source_row["Alert_Count"] = pick_text(row, "Alert_Count")
+    source_row["Critical_Alert_Count"] = pick_text(row, "Critical_Alert_Count")
+    if row_type == "alert":
+        source_row["Alert_Count"] = source_row["Alert_Count"] or "1"
+        source_row["Critical_Alert_Count"] = source_row["Critical_Alert_Count"] or ("1" if pick_text(row, "Severity").lower() == "critical" else "0")
+    if row_type in {"return", "return_v2"}:
+        return_type = infer_return_type(row)
+        if return_type == "unknown_return" and source_row["Return_Type"] in {"customer_return", "courier_return", "unknown_return"}:
+            return_type = source_row["Return_Type"]
+        source_row["Return_Type"] = source_row["Return_Type"] or return_type
+        if return_type == "customer_return":
+            source_row["Customer_Return_YN"] = source_row["Customer_Return_YN"] or "Yes"
+            source_row["Customer_Issue_Category"] = source_row["Customer_Issue_Category"] or infer_customer_issue_category(row)
+            source_row["Customer_Return_Risk_Level"] = source_row["Customer_Return_Risk_Level"] or infer_customer_risk(source_row["Customer_Issue_Category"])
+        elif return_type == "courier_return":
+            source_row["Courier_Return_YN"] = source_row["Courier_Return_YN"] or "Yes"
+            source_row["Courier_Issue_Category"] = source_row["Courier_Issue_Category"] or infer_courier_issue_category(row)
+            source_row["Courier_Return_Risk_Level"] = source_row["Courier_Return_Risk_Level"] or infer_courier_risk(source_row["Courier_Issue_Category"])
+        if pick_text(row, "Customer_Return_Count", "Customer_Returns_Count") and text_value(row.get("Customer_Return_Count", row.get("Customer_Returns_Count", ""))) != "0":
+            source_row["Customer_Return_YN"] = source_row["Customer_Return_YN"] or "Yes"
+        if pick_text(row, "Courier_Return_Count", "Courier_Returns_Count") and text_value(row.get("Courier_Return_Count", row.get("Courier_Returns_Count", ""))) != "0":
+            source_row["Courier_Return_YN"] = source_row["Courier_Return_YN"] or "Yes"
+    if not source_row["Customer_Return_YN"] and source_row["Return_Type"] == "customer_return":
+        source_row["Customer_Return_YN"] = "Yes"
+    if not source_row["Courier_Return_YN"] and source_row["Return_Type"] == "courier_return":
+        source_row["Courier_Return_YN"] = "Yes"
+
+    fsn = clean_fsn(source_row["FSN"])
+    if fsn and fsn in alert_counts:
+        source_row["Alert_Count"] = source_row["Alert_Count"] or str(alert_counts[fsn]["Alert_Count"])
+        source_row["Critical_Alert_Count"] = source_row["Critical_Alert_Count"] or str(alert_counts[fsn]["Critical_Alert_Count"])
+
+    if not source_row["Data_Gap_Reason"]:
+        gaps: List[str] = []
+        if not source_row["Order_ID"]:
+            gaps.append("Order_ID missing")
+        if not source_row["Order_Item_ID"]:
+            gaps.append("Order_Item_ID missing")
+        if not source_row["FSN"]:
+            gaps.append("FSN missing")
+        if not source_row["Return_Type"] and not source_row["Return_ID"]:
+            gaps.append("Return classification missing")
+        source_row["Data_Gap_Reason"] = "; ".join(gaps)
+    source_row["Last_Updated"] = pick_text(row, "Last_Updated", "Updated_At") or now_iso()
+    return source_row
+
+
+def build_source_detail_rows(source: Dict[str, Any]) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    frames: Dict[str, pd.DataFrame] = source["frames"]
+    alert_rows: List[Dict[str, Any]] = source["alert_rows"]
+    run_id = load_latest_run_id(
+        [
+            frames.get("return_all_details", pd.DataFrame()),
+            frames.get("customer_return_comments", pd.DataFrame()),
+            frames.get("courier_return_comments", pd.DataFrame()),
+            frames.get("return_type_pivot", pd.DataFrame()),
+            frames.get("return_comments", pd.DataFrame()),
+            frames.get("adjusted_profit", pd.DataFrame()),
+            frames.get("sku_analysis", pd.DataFrame()),
+        ],
+        [],
+    )
+    alert_counts = build_alert_counts(alert_rows)
+    ordered_sources: List[tuple[str, str, str, Sequence[Dict[str, Any]]]] = []
+
+    def add_source_rows(source_name: str, source_tab: str, row_type: str, rows: Sequence[Dict[str, Any]]) -> None:
+        ordered_sources.append((source_name, source_tab, row_type, rows))
+
+    add_source_rows("Orders.xlsx", "orders", "order", frames.get("orders", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("Returns Report.csv", "returns_report", "return", frames.get("return_comments", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("Returns.xlsx", "returns", "return", frames.get("returns", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("Settled Transactions.xlsx", "settlements", "settlement", frames.get("settlements", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("PNL.xlsx", "pnl", "pnl", frames.get("pnl", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_return_all_details.csv", "return_v2", "return_v2", frames.get("return_all_details", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_customer_return_comments.csv", "return_v2", "return_v2", frames.get("customer_return_comments", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_courier_return_comments.csv", "return_v2", "return_v2", frames.get("courier_return_comments", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_customer_return_issue_summary.csv", "return_v2", "return_v2", frames.get("customer_issue_summary", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_courier_return_summary.csv", "return_v2", "return_v2", frames.get("courier_issue_summary", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_return_type_pivot.csv", "return_v2", "return_v2", frames.get("return_type_pivot", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_return_comments.csv", "return", "return", frames.get("return_comments", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("FLIPKART_ALERTS_GENERATED", "alerts", "alert", alert_rows)
+    add_source_rows("flipkart_ads_final_recommendations.csv", "ads_recommendations", "unknown", frames.get("ads_planner", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_competitor_price_intelligence.csv", "competitor_price", "unknown", load_csv_table(OUTPUT_DIR / "flipkart_competitor_price_intelligence.csv").fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_sku_analysis.csv", "sku_analysis", "unknown", frames.get("sku_analysis", pd.DataFrame()).fillna("").to_dict(orient="records"))
+    add_source_rows("flipkart_adjusted_profit.csv", "adjusted_profit", "unknown", frames.get("adjusted_profit", pd.DataFrame()).fillna("").to_dict(orient="records"))
+
+    source_detail_rows: List[Dict[str, Any]] = []
+    source_counts: Dict[str, int] = {}
+    for source_name, source_tab, row_type, rows in ordered_sources:
+        source_counts[source_name] = 0
+        for row in rows:
+            if not any(text_value(value) for value in row.values()):
+                continue
+            source_detail_rows.append(
+                build_source_detail_row(
+                    row,
+                    run_id=run_id,
+                    source_file=source_name,
+                    source_tab=source_tab,
+                    row_type=row_type,
+                    alert_counts=alert_counts,
+                )
+            )
+            source_counts[source_name] += 1
+
+    return source_detail_rows, {
+        "run_id": run_id,
+        "source_counts": source_counts,
+        "alert_rows": len(alert_rows),
+        "source_row_total": sum(source_counts.values()),
+    }
+
+
+def build_master_row_from_group(
+    group_rows: Sequence[Dict[str, Any]],
+    run_id: str,
+) -> Dict[str, Any]:
+    ordered_rows = sorted(group_rows, key=lambda row: (source_rank(text_value(row.get("Source_File", "")), text_value(row.get("Source_Row_Type", ""))), normalize_text(row.get("Last_Updated", ""))), reverse=False)
+    master_row: Dict[str, Any] = {header: "" for header in ORDER_ITEM_MASTER_HEADERS}
+    master_row["Run_ID"] = run_id
+    master_row["Source_Row_Count"] = str(len(group_rows))
+    master_row["Sources_Present"] = " | ".join(dict.fromkeys(text_value(row.get("Source_File", "")) for row in ordered_rows if text_value(row.get("Source_File", ""))))
+    master_row["Last_Updated"] = max((text_value(row.get("Last_Updated", "")) for row in ordered_rows if text_value(row.get("Last_Updated", ""))), default=now_iso())
+
+    def first_non_blank(*fields: str) -> str:
+        for row in ordered_rows:
+            for field in fields:
+                value = text_value(row.get(field, ""))
+                if value:
+                    return value
+        return ""
+
+    master_row["Order_ID"] = first_non_blank("Order_ID")
+    master_row["Order_Item_ID"] = first_non_blank("Order_Item_ID")
+    master_row["Master_Order_Key"] = first_non_blank("Order_Item_ID") or order_item_master_key(ordered_rows[0])
+    master_row["FSN"] = first_non_blank("FSN")
+    master_row["SKU_ID"] = first_non_blank("SKU_ID")
+    master_row["Product_Title"] = first_non_blank("Product_Title")
+    master_row["Order_Date"] = first_non_blank("Order_Date")
+    master_row["Quantity"] = first_non_blank("Quantity")
+    master_row["Selling_Price"] = first_non_blank("Selling_Price")
+    master_row["Settlement_Amount"] = first_non_blank("Settlement_Amount")
+    master_row["Total_Deductions"] = first_non_blank("Total_Deductions")
+    master_row["Cost_Price"] = first_non_blank("Cost_Price")
+    master_row["COGS"] = first_non_blank("COGS")
+    master_row["Net_Profit"] = first_non_blank("Net_Profit")
+    master_row["Profit_Margin"] = first_non_blank("Profit_Margin")
+    return_ids = []
+    customer_return_seen = False
+    courier_return_seen = False
+    alert_count_total = 0
+    critical_alert_count_total = 0
+    return_types = []
+    customer_issue = ""
+    courier_issue = ""
+    customer_risk = ""
+    courier_risk = ""
+    final_ads_decision = ""
+    competition_risk = ""
+    latest_event_date = ""
+    return_status = ""
+    return_reason = ""
+    return_sub_reason = ""
+    for row in ordered_rows:
+        return_id = text_value(row.get("Return_ID", ""))
+        if return_id and return_id not in return_ids:
+            return_ids.append(return_id)
+        if text_value(row.get("Customer_Return_YN", "")).lower() == "yes":
+            customer_return_seen = True
+        if text_value(row.get("Courier_Return_YN", "")).lower() == "yes":
+            courier_return_seen = True
+        alert_count_total += int(parse_float(row.get("Alert_Count", "")))
+        critical_alert_count_total += int(parse_float(row.get("Critical_Alert_Count", "")))
+        return_type = text_value(row.get("Return_Type", ""))
+        if return_type and return_type not in return_types:
+            return_types.append(return_type)
+        customer_issue = customer_issue or text_value(row.get("Customer_Issue_Category", ""))
+        courier_issue = courier_issue or text_value(row.get("Courier_Issue_Category", ""))
+        customer_risk = customer_risk or text_value(row.get("Customer_Return_Risk_Level", ""))
+        courier_risk = courier_risk or text_value(row.get("Courier_Return_Risk_Level", ""))
+        final_ads_decision = final_ads_decision or text_value(row.get("Final_Ads_Decision", ""))
+        competition_risk = competition_risk or text_value(row.get("Competition_Risk_Level", ""))
+        latest_event_date = max(latest_event_date, text_value(row.get("Return_Date", "")), text_value(row.get("Settlement_Date", "")), text_value(row.get("Delivery_Date", "")), text_value(row.get("Dispatch_Date", "")), text_value(row.get("Order_Date", "")))
+        return_status = return_status or text_value(row.get("Return_Status", ""))
+        return_reason = return_reason or text_value(row.get("Return_Reason", ""))
+        return_sub_reason = return_sub_reason or text_value(row.get("Return_Sub_Reason", ""))
+
+    master_row["Latest_Event_Date"] = latest_event_date
+    master_row["Return_YN"] = "Yes" if (return_ids or return_types or customer_return_seen or courier_return_seen) else "No"
+    master_row["Return_IDs"] = " | ".join(return_ids)
+    master_row["Return_Type_Final"] = " | ".join(dict.fromkeys(return_types))
+    master_row["Customer_Return_YN"] = "Yes" if customer_return_seen else ""
+    master_row["Courier_Return_YN"] = "Yes" if courier_return_seen else ""
+    master_row["Return_Status_Final"] = return_status
+    master_row["Return_Reason_Final"] = return_reason
+    master_row["Return_Sub_Reason_Final"] = return_sub_reason
+    master_row["Customer_Issue_Category"] = customer_issue
+    master_row["Courier_Issue_Category"] = courier_issue
+    master_row["Customer_Return_Risk_Level"] = customer_risk
+    master_row["Courier_Return_Risk_Level"] = courier_risk
+    master_row["Alert_Count"] = str(alert_count_total) if alert_count_total else ""
+    master_row["Critical_Alert_Count"] = str(critical_alert_count_total) if critical_alert_count_total else ""
+    master_row["Final_Ads_Decision"] = final_ads_decision
+    master_row["Competition_Risk_Level"] = competition_risk
+    master_row["Data_Completeness_Status"] = "Partial"
+    return master_row
+
+
+def build_master_rows(source_detail_rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    grouped: "OrderedDict[str, List[Dict[str, Any]]]" = OrderedDict()
+    alert_rows_by_fsn: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for row in source_detail_rows:
+        if text_value(row.get("Source_Row_Type", "")) == "alert":
+            fsn = clean_fsn(row.get("FSN", ""))
+            if fsn:
+                alert_rows_by_fsn[fsn].append(row)
+            continue
+        key = order_item_master_key(row)
+        if not key:
+            continue
+        grouped.setdefault(key, []).append(row)
+
+    master_rows: List[Dict[str, Any]] = []
+    for key, rows in grouped.items():
+        fsn = clean_fsn(rows[0].get("FSN", ""))
+        alert_rows = alert_rows_by_fsn.get(fsn, [])
+        combined_rows = list(rows) + list(alert_rows)
+        master_row = build_master_row_from_group(combined_rows, text_value(rows[0].get("Run_ID", "")))
+        master_row["Master_Order_Key"] = key
+        order_id = text_value(master_row.get("Order_ID", ""))
+        fsn = text_value(master_row.get("FSN", ""))
+        net_profit = text_value(master_row.get("Net_Profit", ""))
+        return_type = text_value(master_row.get("Return_Type_Final", ""))
+        data_gap_reason = []
+        if not order_id:
+            data_gap_reason.append("Missing Order ID")
+        if not fsn:
+            data_gap_reason.append("Missing FSN")
+        if not net_profit:
+            data_gap_reason.append("Missing Profit")
+        if not return_type:
+            data_gap_reason.append("Missing Return Classification")
+        master_row["Data_Gap_Reason"] = "; ".join(data_gap_reason)
+        if not data_gap_reason:
+            master_row["Data_Completeness_Status"] = "Complete"
+        elif len(data_gap_reason) == 1:
+            master_row["Data_Completeness_Status"] = data_gap_reason[0]
+        else:
+            master_row["Data_Completeness_Status"] = "Partial"
+        if not master_row["Customer_Return_YN"] and master_row["Return_Type_Final"] == "customer_return":
+            master_row["Customer_Return_YN"] = "Yes"
+        if not master_row["Courier_Return_YN"] and master_row["Return_Type_Final"] == "courier_return":
+            master_row["Courier_Return_YN"] = "Yes"
+        master_row["Source_Row_Count"] = str(len(combined_rows))
+        sources_present = " | ".join(dict.fromkeys(text_value(row.get("Source_File", "")) for row in combined_rows if text_value(row.get("Source_File", ""))))
+        master_row["Sources_Present"] = sources_present
+        alert_rows = alert_rows_by_fsn.get(fsn, [])
+        alert_count = len(alert_rows)
+        critical_alert_count = sum(1 for row in alert_rows if normalize_text(row.get("Severity", "")).lower() == "critical")
+        master_row["Alert_Count"] = str(alert_count) if alert_count else ""
+        master_row["Critical_Alert_Count"] = str(critical_alert_count) if critical_alert_count else ""
+        master_rows.append(master_row)
+    return master_rows
+
+
 def build_data_gap_reason(record: Dict[str, Any]) -> str:
     gaps = list(record.get("__data_gaps", []))
     if not text_value(record.get("Order_ID", "")):
@@ -548,6 +1001,10 @@ def load_source_data(sheets_service: object, spreadsheet_id: str) -> Dict[str, A
         frames["sku_analysis"] = load_sheet_table_if_available(sheets_service, spreadsheet_id, SHEET_FALLBACK_TABS["sku_analysis"])
     if frames["adjusted_profit"].empty:
         frames["adjusted_profit"] = load_sheet_table_if_available(sheets_service, spreadsheet_id, SHEET_FALLBACK_TABS["adjusted_profit"])
+    if frames.get("customer_issue_summary", pd.DataFrame()).empty and tab_exists(sheets_service, spreadsheet_id, "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY"):
+        frames["customer_issue_summary"] = load_sheet_table_if_available(sheets_service, spreadsheet_id, "FLIPKART_CUSTOMER_RETURN_ISSUE_SUMMARY")
+    if frames.get("courier_issue_summary", pd.DataFrame()).empty and tab_exists(sheets_service, spreadsheet_id, "FLIPKART_COURIER_RETURN_SUMMARY"):
+        frames["courier_issue_summary"] = load_sheet_table_if_available(sheets_service, spreadsheet_id, "FLIPKART_COURIER_RETURN_SUMMARY")
     if not frames["ads_recommendations"].empty:
         frames["ads_planner"] = frames["ads_recommendations"]
     elif frames["ads_planner"].empty:
@@ -560,7 +1017,7 @@ def load_source_data(sheets_service: object, spreadsheet_id: str) -> Dict[str, A
     }
 
 
-def build_order_item_explorer_rows(source: Dict[str, Any]) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def build_legacy_order_item_explorer_rows(source: Dict[str, Any]) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
     frames: Dict[str, pd.DataFrame] = source["frames"]
     alert_rows: List[Dict[str, Any]] = source["alert_rows"]
     run_id = load_latest_run_id(
@@ -652,15 +1109,40 @@ def build_order_item_explorer_rows(source: Dict[str, Any]) -> tuple[List[Dict[st
     }
 
 
-def write_local_outputs(rows: Sequence[Dict[str, Any]]) -> None:
-    write_csv(LOCAL_ORDER_ITEM_PATH, OUTPUT_HEADERS, rows)
-    write_csv(LOCAL_LOOKER_PATH, OUTPUT_HEADERS, rows)
+def write_local_outputs(
+    legacy_rows: Sequence[Dict[str, Any]],
+    master_rows: Sequence[Dict[str, Any]],
+    source_detail_rows: Sequence[Dict[str, Any]],
+) -> None:
+    write_csv(LOCAL_LEGACY_ORDER_ITEM_PATH, OUTPUT_HEADERS, legacy_rows)
+    write_csv(LOCAL_LEGACY_LOOKER_PATH, OUTPUT_HEADERS, legacy_rows)
+    write_csv(LOCAL_MASTER_PATH, ORDER_ITEM_MASTER_HEADERS, master_rows)
+    write_csv(LOCAL_SOURCE_DETAIL_PATH, ORDER_ITEM_SOURCE_DETAIL_HEADERS, source_detail_rows)
+    write_csv(LOCAL_LOOKER_MASTER_PATH, ORDER_ITEM_MASTER_HEADERS, master_rows)
+    write_csv(LOCAL_LOOKER_SOURCE_DETAIL_PATH, ORDER_ITEM_SOURCE_DETAIL_HEADERS, source_detail_rows)
 
 
-def write_outputs_to_sheet(sheets_service, spreadsheet_id: str, rows: Sequence[Dict[str, Any]]) -> List[str]:
-    write_sheet_tab(sheets_service, spreadsheet_id, ORDER_ITEM_TAB, OUTPUT_HEADERS, rows)
-    write_sheet_tab(sheets_service, spreadsheet_id, LOOKER_ORDER_ITEM_TAB, OUTPUT_HEADERS, rows)
-    return [ORDER_ITEM_TAB, LOOKER_ORDER_ITEM_TAB]
+def write_outputs_to_sheet(
+    sheets_service,
+    spreadsheet_id: str,
+    legacy_rows: Sequence[Dict[str, Any]],
+    master_rows: Sequence[Dict[str, Any]],
+    source_detail_rows: Sequence[Dict[str, Any]],
+) -> List[str]:
+    write_sheet_tab(sheets_service, spreadsheet_id, ORDER_ITEM_TAB, OUTPUT_HEADERS, legacy_rows)
+    write_sheet_tab(sheets_service, spreadsheet_id, LOOKER_ORDER_ITEM_TAB, OUTPUT_HEADERS, legacy_rows)
+    write_sheet_tab(sheets_service, spreadsheet_id, ORDER_ITEM_MASTER_TAB, ORDER_ITEM_MASTER_HEADERS, master_rows)
+    write_sheet_tab(sheets_service, spreadsheet_id, ORDER_ITEM_SOURCE_DETAIL_TAB, ORDER_ITEM_SOURCE_DETAIL_HEADERS, source_detail_rows)
+    write_sheet_tab(sheets_service, spreadsheet_id, LOOKER_ORDER_ITEM_MASTER_TAB, ORDER_ITEM_MASTER_HEADERS, master_rows)
+    write_sheet_tab(sheets_service, spreadsheet_id, LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB, ORDER_ITEM_SOURCE_DETAIL_HEADERS, source_detail_rows)
+    return [
+        ORDER_ITEM_TAB,
+        LOOKER_ORDER_ITEM_TAB,
+        ORDER_ITEM_MASTER_TAB,
+        ORDER_ITEM_SOURCE_DETAIL_TAB,
+        LOOKER_ORDER_ITEM_MASTER_TAB,
+        LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB,
+    ]
 
 
 def create_flipkart_order_item_explorer() -> Dict[str, Any]:
@@ -671,40 +1153,64 @@ def create_flipkart_order_item_explorer() -> Dict[str, Any]:
     spreadsheet_id = load_json(SPREADSHEET_META_PATH)["spreadsheet_id"]
     sheets_service, _, _ = build_services()
     source = load_source_data(sheets_service, spreadsheet_id)
-    rows, summary = build_order_item_explorer_rows(source)
-    write_local_outputs(rows)
-    tabs_updated = write_outputs_to_sheet(sheets_service, spreadsheet_id, rows)
+    legacy_rows, summary = build_legacy_order_item_explorer_rows(source)
+    source_detail_rows, detail_summary = build_source_detail_rows(source)
+    master_rows = build_master_rows(source_detail_rows)
+    write_local_outputs(legacy_rows, master_rows, source_detail_rows)
+    tabs_updated = write_outputs_to_sheet(sheets_service, spreadsheet_id, legacy_rows, master_rows, source_detail_rows)
 
-    order_id_present_count = sum(1 for row in rows if text_value(row.get("Order_ID", "")))
-    order_item_id_present_count = sum(1 for row in rows if text_value(row.get("Order_Item_ID", "")))
-    blank_fsn_count = sum(1 for row in rows if not clean_fsn(row.get("FSN", "")))
-    duplicate_order_item_id_count = 0
-    order_item_counts = Counter(text_value(row.get("Order_Item_ID", "")) for row in rows if text_value(row.get("Order_Item_ID", "")))
+    order_id_present_count = sum(1 for row in master_rows if text_value(row.get("Order_ID", "")))
+    order_item_id_present_count = sum(1 for row in master_rows if text_value(row.get("Order_Item_ID", "")))
+    blank_fsn_count = sum(1 for row in master_rows if not clean_fsn(row.get("FSN", "")))
+    order_only_fallback_count = sum(1 for row in master_rows if not text_value(row.get("Order_Item_ID", "")) and text_value(row.get("Order_ID", "")))
+    order_item_counts = Counter(text_value(row.get("Order_Item_ID", "")) for row in master_rows if text_value(row.get("Order_Item_ID", "")))
     duplicate_order_item_id_count = sum(count - 1 for count in order_item_counts.values() if count > 1)
+    source_detail_blank_fsn_count = sum(1 for row in source_detail_rows if not clean_fsn(row.get("FSN", "")))
 
     warnings: List[str] = []
     if summary["source_row_total"] == 0:
         warnings.append("No local order-level source rows were available")
     if order_item_id_present_count == 0 and order_id_present_count > 0:
         warnings.append("Order_Item_ID values are still missing for the available order rows")
+    if blank_fsn_count > 0:
+        warnings.append(f"{blank_fsn_count} master rows are missing FSN")
+    if source_detail_blank_fsn_count > 0:
+        warnings.append(f"{source_detail_blank_fsn_count} source detail rows are missing FSN")
+    if order_only_fallback_count > 0:
+        warnings.append(f"{order_only_fallback_count} master rows use the order-only fallback key")
+
+    status = "PASS"
+    if duplicate_order_item_id_count > 0:
+        status = "FAIL"
+    elif warnings:
+        status = "PASS_WITH_WARNINGS"
 
     result = {
-        "status": "SUCCESS",
+        "status": status,
         "spreadsheet_id": spreadsheet_id,
         "run_id": summary["run_id"],
-        "order_item_rows": len(rows),
-        "looker_rows": len(rows),
+        "legacy_explorer_rows": len(legacy_rows),
+        "master_rows": len(master_rows),
+        "source_detail_rows": len(source_detail_rows),
+        "looker_rows": len(legacy_rows),
         "order_id_present_count": order_id_present_count,
         "order_item_id_present_count": order_item_id_present_count,
         "duplicate_order_item_id_count": duplicate_order_item_id_count,
-        "blank_fsn_count": blank_fsn_count,
+        "blank_fsn_count_master": blank_fsn_count,
+        "source_detail_blank_fsn_count": source_detail_blank_fsn_count,
+        "order_only_fallback_count": order_only_fallback_count,
         "warnings": warnings,
         "tabs_updated": tabs_updated,
         "local_outputs": {
-            "order_item_explorer": str(LOCAL_ORDER_ITEM_PATH),
-            "looker_order_item_explorer": str(LOCAL_LOOKER_PATH),
+            "order_item_explorer": str(LOCAL_LEGACY_ORDER_ITEM_PATH),
+            "looker_order_item_explorer": str(LOCAL_LEGACY_LOOKER_PATH),
+            "order_item_master": str(LOCAL_MASTER_PATH),
+            "order_item_source_detail": str(LOCAL_SOURCE_DETAIL_PATH),
+            "looker_order_item_master": str(LOCAL_LOOKER_MASTER_PATH),
+            "looker_order_item_source_detail": str(LOCAL_LOOKER_SOURCE_DETAIL_PATH),
         },
         "source_counts": summary["source_counts"],
+        "source_detail_source_counts": detail_summary["source_counts"],
         "alert_rows": summary["alert_rows"],
     }
     append_csv_log(
@@ -713,12 +1219,16 @@ def create_flipkart_order_item_explorer() -> Dict[str, Any]:
             "timestamp",
             "spreadsheet_id",
             "run_id",
-            "order_item_rows",
+            "legacy_explorer_rows",
+            "master_rows",
+            "source_detail_rows",
             "looker_rows",
             "order_id_present_count",
             "order_item_id_present_count",
             "duplicate_order_item_id_count",
-            "blank_fsn_count",
+            "blank_fsn_count_master",
+            "source_detail_blank_fsn_count",
+            "order_only_fallback_count",
             "status",
             "message",
         ],
@@ -727,14 +1237,18 @@ def create_flipkart_order_item_explorer() -> Dict[str, Any]:
                 "timestamp": now_iso(),
                 "spreadsheet_id": spreadsheet_id,
                 "run_id": summary["run_id"],
-                "order_item_rows": len(rows),
-                "looker_rows": len(rows),
+                "legacy_explorer_rows": len(legacy_rows),
+                "master_rows": len(master_rows),
+                "source_detail_rows": len(source_detail_rows),
+                "looker_rows": len(legacy_rows),
                 "order_id_present_count": order_id_present_count,
                 "order_item_id_present_count": order_item_id_present_count,
                 "duplicate_order_item_id_count": duplicate_order_item_id_count,
-                "blank_fsn_count": blank_fsn_count,
-                "status": "SUCCESS",
-                "message": "Rebuilt Flipkart order-item explorer tabs",
+                "blank_fsn_count_master": blank_fsn_count,
+                "source_detail_blank_fsn_count": source_detail_blank_fsn_count,
+                "order_only_fallback_count": order_only_fallback_count,
+                "status": status,
+                "message": "Rebuilt Flipkart order-item master, source detail, and legacy tabs",
             }
         ],
     )

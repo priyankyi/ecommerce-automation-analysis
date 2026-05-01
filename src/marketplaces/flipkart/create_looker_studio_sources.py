@@ -65,6 +65,8 @@ SOURCE_TABS = [
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
     "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
     "FLIPKART_ORDER_ITEM_EXPLORER",
+    "FLIPKART_ORDER_ITEM_MASTER",
+    "FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
 ]
 
 LOOKER_EXECUTIVE_TAB = "LOOKER_FLIPKART_EXECUTIVE_SUMMARY"
@@ -79,6 +81,8 @@ LOOKER_COURIER_RETURNS_TAB = "LOOKER_FLIPKART_COURIER_RETURNS"
 LOOKER_RETURN_TYPE_PIVOT_TAB = "LOOKER_FLIPKART_RETURN_TYPE_PIVOT"
 LOOKER_LISTINGS_TAB = "LOOKER_FLIPKART_LISTINGS"
 LOOKER_ORDER_ITEM_EXPLORER_TAB = "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"
+LOOKER_ORDER_ITEM_MASTER_TAB = "LOOKER_FLIPKART_ORDER_ITEM_MASTER"
+LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB = "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL"
 LOOKER_ADJUSTED_PROFIT_TAB = "LOOKER_FLIPKART_ADJUSTED_PROFIT"
 LOOKER_REPORT_FORMAT_MONITOR_TAB = "LOOKER_FLIPKART_REPORT_FORMAT_MONITOR"
 LOOKER_RUN_QUALITY_TAB = "LOOKER_FLIPKART_RUN_QUALITY_SCORE"
@@ -100,6 +104,8 @@ LOOKER_TABS = [
     LOOKER_RETURN_TYPE_PIVOT_TAB,
     LOOKER_LISTINGS_TAB,
     LOOKER_ORDER_ITEM_EXPLORER_TAB,
+    LOOKER_ORDER_ITEM_MASTER_TAB,
+    LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB,
     LOOKER_RUN_COMPARISON_TAB,
     LOOKER_ADJUSTED_PROFIT_TAB,
     LOOKER_REPORT_FORMAT_MONITOR_TAB,
@@ -338,6 +344,90 @@ LOOKER_HEADERS = {
         "Competition_Risk_Level",
         "Data_Gap_Reason",
         "Source_File",
+        "Last_Updated",
+    ],
+    LOOKER_ORDER_ITEM_MASTER_TAB: [
+        "Run_ID",
+        "Order_ID",
+        "Order_Item_ID",
+        "Master_Order_Key",
+        "FSN",
+        "SKU_ID",
+        "Product_Title",
+        "Order_Date",
+        "Latest_Event_Date",
+        "Quantity",
+        "Selling_Price",
+        "Settlement_Amount",
+        "Total_Deductions",
+        "Cost_Price",
+        "COGS",
+        "Net_Profit",
+        "Profit_Margin",
+        "Return_YN",
+        "Return_IDs",
+        "Return_Type_Final",
+        "Customer_Return_YN",
+        "Courier_Return_YN",
+        "Return_Status_Final",
+        "Return_Reason_Final",
+        "Return_Sub_Reason_Final",
+        "Customer_Issue_Category",
+        "Courier_Issue_Category",
+        "Customer_Return_Risk_Level",
+        "Courier_Return_Risk_Level",
+        "Alert_Count",
+        "Critical_Alert_Count",
+        "Final_Ads_Decision",
+        "Competition_Risk_Level",
+        "Source_Row_Count",
+        "Sources_Present",
+        "Data_Completeness_Status",
+        "Data_Gap_Reason",
+        "Last_Updated",
+    ],
+    LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB: [
+        "Run_ID",
+        "Source_File",
+        "Source_Tab",
+        "Source_Row_Type",
+        "Order_ID",
+        "Order_Item_ID",
+        "Return_ID",
+        "FSN",
+        "SKU_ID",
+        "Product_Title",
+        "Order_Date",
+        "Dispatch_Date",
+        "Delivery_Date",
+        "Settlement_Date",
+        "Return_Date",
+        "Quantity",
+        "Selling_Price",
+        "Settlement_Amount",
+        "Commission",
+        "Shipping_Fee",
+        "Other_Fees",
+        "Total_Deductions",
+        "Cost_Price",
+        "COGS",
+        "Net_Profit",
+        "Profit_Margin",
+        "Return_Type",
+        "Customer_Return_YN",
+        "Courier_Return_YN",
+        "Return_Status",
+        "Return_Reason",
+        "Return_Sub_Reason",
+        "Customer_Issue_Category",
+        "Courier_Issue_Category",
+        "Customer_Return_Risk_Level",
+        "Courier_Return_Risk_Level",
+        "Alert_Count",
+        "Critical_Alert_Count",
+        "Final_Ads_Decision",
+        "Competition_Risk_Level",
+        "Data_Gap_Reason",
         "Last_Updated",
     ],
 }
@@ -1257,6 +1347,8 @@ def create_looker_studio_sources() -> Dict[str, Any]:
         run_history_headers, run_history_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_RUN_HISTORY")
         fsn_history_headers, fsn_history_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_FSN_HISTORY")
         order_item_headers, order_item_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ORDER_ITEM_EXPLORER")
+        order_item_master_headers, order_item_master_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ORDER_ITEM_MASTER")
+        order_item_source_detail_headers, order_item_source_detail_rows = read_table(sheets_service, spreadsheet_id, "FLIPKART_ORDER_ITEM_SOURCE_DETAIL")
 
         latest_run_row = get_latest_run_row(run_history_rows)
         latest_run_id = latest_text_value(latest_run_row, "Run_ID")
@@ -1402,6 +1494,8 @@ def create_looker_studio_sources() -> Dict[str, Any]:
             LOOKER_DEMAND_PROFILE_TAB: (demand_looker_headers, demand_looker_rows),
             LOOKER_COMPETITOR_INTELLIGENCE_TAB: (competitor_headers, competitor_rows),
             LOOKER_ORDER_ITEM_EXPLORER_TAB: (order_item_headers, order_item_rows),
+            LOOKER_ORDER_ITEM_MASTER_TAB: (order_item_master_headers, order_item_master_rows),
+            LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB: (order_item_source_detail_headers, order_item_source_detail_rows),
         }
 
         for tab_name, (headers, rows) in looker_extension_payloads.items():
