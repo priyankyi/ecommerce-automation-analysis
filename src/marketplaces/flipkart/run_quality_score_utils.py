@@ -188,8 +188,8 @@ def count_return_fsns(rows: Sequence[Dict[str, Any]]) -> int:
     return sum(
         1
         for row in rows
-        if parse_float(row.get("Returns", "")) > 0
-        or parse_float(row.get("Return_Rate", "")) > 0
+        if parse_float(row.get("Customer_Return_Count", row.get("Returns", ""))) > 0
+        or parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", ""))) > 0
     )
 
 

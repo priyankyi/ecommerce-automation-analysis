@@ -395,7 +395,7 @@ def resolve_readiness(
         else:
             profit_readiness = "Moderate"
 
-    return_rate = safe_float(analysis_row.get("Return_Rate", ""))
+    return_rate = safe_float(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")))
     return_readiness = pick_first_nonblank(planner_row.get("Return_Readiness", ""), "")
     if not return_readiness:
         if return_rate >= 0.50:
@@ -436,7 +436,8 @@ def resolve_readiness(
         "Alert_Readiness": alert_readiness,
         "Final_Net_Profit": format_decimal(analysis_row.get("Final_Net_Profit", ""), 2) if normalize_text(analysis_row.get("Final_Net_Profit", "")) else "",
         "Final_Profit_Margin": format_decimal(analysis_row.get("Final_Profit_Margin", ""), 4) if normalize_text(analysis_row.get("Final_Profit_Margin", "")) else "",
-        "Return_Rate": format_decimal(analysis_row.get("Return_Rate", ""), 4) if normalize_text(analysis_row.get("Return_Rate", "")) else "",
+        "Return_Rate": format_decimal(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")), 4) if normalize_text(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", ""))) else "",
+        "Customer_Return_Rate": format_decimal(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")), 4) if normalize_text(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", ""))) else "",
     }
 
 
@@ -710,6 +711,7 @@ def append_new_columns(headers: Sequence[str]) -> List[str]:
         "Customer_Return_Risk_Level",
         "Courier_Return_Rate",
         "Courier_Return_Risk_Level",
+        "Total_Return_Rate",
         "Next_Ad_Action_Date",
         "Ads_Review_Date",
         "Ads_Data_Used",
@@ -820,6 +822,7 @@ def build_final_rows(
         updated["Customer_Return_Risk_Level"] = normalize_text(customer_row.get("Customer_Return_Risk_Level", ""))
         updated["Courier_Return_Rate"] = normalize_text(courier_row.get("Courier_Return_Rate", ""))
         updated["Courier_Return_Risk_Level"] = normalize_text(courier_row.get("Courier_Return_Risk_Level", ""))
+        updated["Total_Return_Rate"] = normalize_text(return_row.get("Total_Return_Rate", return_row.get("Return_Rate", "")))
         updated["Next_Ad_Action_Date"] = next_action_date
         updated["Ads_Review_Date"] = review_date
         updated["Ads_Data_Used"] = ads_data_used

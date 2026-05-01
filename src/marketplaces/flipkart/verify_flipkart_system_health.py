@@ -56,6 +56,9 @@ TABS_TO_CHECK = [
     "FLIPKART_COMPETITOR_SEARCH_QUEUE",
     "FLIPKART_VISUAL_COMPETITOR_RESULTS",
     "FLIPKART_COMPETITOR_PRICE_INTELLIGENCE",
+    "LOOKER_FLIPKART_FSN_METRICS",
+    "LOOKER_FLIPKART_RETURNS",
+    "LOOKER_FLIPKART_RETURN_TYPE_PIVOT",
     "LOOKER_FLIPKART_ORDER_ITEM_EXPLORER",
     "LOOKER_FLIPKART_ORDER_ITEM_MASTER",
     "LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL",
@@ -222,6 +225,9 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     competitor_queue_rows = tables["FLIPKART_COMPETITOR_SEARCH_QUEUE"][1]
     competitor_result_rows = tables["FLIPKART_VISUAL_COMPETITOR_RESULTS"][1]
     competitor_price_rows = tables["FLIPKART_COMPETITOR_PRICE_INTELLIGENCE"][1]
+    looker_fsn_metrics_rows = tables["LOOKER_FLIPKART_FSN_METRICS"][1]
+    looker_returns_rows = tables["LOOKER_FLIPKART_RETURNS"][1]
+    looker_return_type_pivot_rows = tables["LOOKER_FLIPKART_RETURN_TYPE_PIVOT"][1]
     looker_order_item_rows = tables["LOOKER_FLIPKART_ORDER_ITEM_EXPLORER"][1]
     looker_order_item_master_rows = tables["LOOKER_FLIPKART_ORDER_ITEM_MASTER"][1]
     looker_order_item_source_detail_rows = tables["LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL"][1]
@@ -242,6 +248,28 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
     customer_return_count = sum(1 for row in return_all_details_rows if normalize_text(row.get("Return_Bucket", "")) == "customer_return")
     courier_return_count = sum(1 for row in return_all_details_rows if normalize_text(row.get("Return_Bucket", "")) == "courier_return")
     unknown_return_count = sum(1 for row in return_all_details_rows if normalize_text(row.get("Return_Bucket", "")) == "unknown_return")
+    looker_fsn_metrics_has_return_fields = bool(looker_fsn_metrics_rows) and all(
+        field in looker_fsn_metrics_rows[0]
+        for field in [
+            "Customer_Return_Count",
+            "Customer_Return_Rate",
+            "Courier_Return_Count",
+            "Courier_Return_Rate",
+            "Total_Return_Count",
+            "Total_Return_Rate",
+        ]
+    )
+    looker_returns_has_return_fields = bool(looker_returns_rows) and all(
+        field in looker_returns_rows[0]
+        for field in [
+            "Customer_Return_Count",
+            "Courier_Return_Count",
+            "Unknown_Return_Count",
+            "Customer_Return_Rate",
+            "Courier_Return_Rate",
+            "Total_Return_Rate",
+        ]
+    )
     critical_customer_return_fsn_count = sum(1 for row in customer_summary_rows if normalize_text(row.get("Customer_Return_Risk_Level", "")) == "Critical")
     high_courier_return_fsn_count = sum(1 for row in courier_summary_rows if normalize_text(row.get("Courier_Return_Risk_Level", "")) == "High")
     order_item_master_blank_fsn_count = sum(1 for row in order_item_master_rows if not normalize_text(row.get("FSN", "")))
@@ -266,6 +294,10 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         warnings.append("order item master has missing profit rows")
     if order_item_master_order_only_count > 0:
         warnings.append("order-only fallback rows are present")
+    if not looker_fsn_metrics_has_return_fields:
+        warnings.append("looker fsn metrics is missing explicit return fields")
+    if not looker_returns_has_return_fields:
+        warnings.append("looker returns is missing explicit return fields")
     if "FLIPKART_ORDER_ITEM_EXPLORER" not in available_tabs:
         warnings.append("order item explorer source tab is missing")
     elif not order_item_rows:
@@ -375,6 +407,8 @@ def verify_flipkart_system_health() -> Dict[str, Any]:
         "looker_order_item_source_detail_has_rows": ("LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL" not in available_tabs) or row_counts["LOOKER_FLIPKART_ORDER_ITEM_SOURCE_DETAIL"] > 0,
         "customer_return_rate_source_is_customer_only": customer_only_rows == row_counts["FLIPKART_CUSTOMER_RETURN_COMMENTS"],
         "courier_return_rate_source_is_courier_only": courier_only_rows == row_counts["FLIPKART_COURIER_RETURN_COMMENTS"],
+        "looker_fsn_metrics_has_return_fields": looker_fsn_metrics_has_return_fields,
+        "looker_returns_has_return_fields": looker_returns_has_return_fields,
     }
 
     required_missing_tabs = [

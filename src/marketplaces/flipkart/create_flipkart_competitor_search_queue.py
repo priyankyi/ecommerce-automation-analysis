@@ -220,7 +220,8 @@ def build_queue_rows(
         pack_count = infer_pack_count(product_title)
         unit_price = derive_unit_price(selling_price, pack_count)
         module_status = normalize_text(module_row.get("Overall_Confidence_Status", ""))
-        priority = derive_priority(planner_row.get("Final_Ads_Decision", ""), analysis_row.get("Final_Profit_Margin", ""), analysis_row.get("Return_Rate", ""), alert_summary, module_status)
+        customer_return_rate = normalize_text(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")))
+        priority = derive_priority(planner_row.get("Final_Ads_Decision", ""), analysis_row.get("Final_Profit_Margin", ""), customer_return_rate, alert_summary, module_status)
         queue_rows.append(
             {
                 "Run_ID": run_id,
@@ -234,7 +235,7 @@ def build_queue_rows(
                 "Our_Pack_Count": pack_count,
                 "Our_Unit_Price": unit_price,
                 "Our_Final_Profit_Margin": format_decimal(analysis_row.get("Final_Profit_Margin", ""), 4) if normalize_text(analysis_row.get("Final_Profit_Margin", "")) else "",
-                "Our_Return_Rate": format_decimal(analysis_row.get("Return_Rate", ""), 4) if normalize_text(analysis_row.get("Return_Rate", "")) else "",
+                "Our_Return_Rate": format_decimal(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")), 4) if normalize_text(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", ""))) else "",
                 "Product_Image_URL": normalize_text(existing_row.get("Product_Image_URL", "")),
                 "Search_Method": normalize_text(existing_row.get("Search_Method", "")) or "Visual Search",
                 "Search_Status": normalize_text(existing_row.get("Search_Status", "")) or "Pending",

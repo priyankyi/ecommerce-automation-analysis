@@ -759,7 +759,7 @@ def classify_readiness(
         else:
             profit_readiness = "Moderate"
 
-    return_rate = parse_float(analysis_row.get("Return_Rate", ""))
+    return_rate = parse_float(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")))
     if return_rate >= 0.50:
         return_readiness = "Critical"
     elif return_rate >= 0.20:
@@ -817,7 +817,7 @@ def build_ads_action(
     cogs_missing = readiness["COGS_Readiness"] != "Ready"
     final_net_profit = parse_float(analysis_row.get("Final_Net_Profit", ""))
     final_profit_margin = parse_float(analysis_row.get("Final_Profit_Margin", ""))
-    return_rate = parse_float(analysis_row.get("Return_Rate", ""))
+    return_rate = parse_float(analysis_row.get("Customer_Return_Rate", analysis_row.get("Return_Rate", "")))
     listing_status = normalize_text(analysis_row.get("Listing_Status", ""))
     active_severity = normalize_text(active_task_row.get("Severity", ""))
     product_type_norm = normalize_text(final_product_type)

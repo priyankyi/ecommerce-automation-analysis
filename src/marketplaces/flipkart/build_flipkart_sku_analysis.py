@@ -56,6 +56,13 @@ SKU_HEADERS = [
     "Gross_Sales",
     "Returns",
     "Return_Rate",
+    "Customer_Return_Count",
+    "Courier_Return_Count",
+    "Unknown_Return_Count",
+    "Total_Return_Count",
+    "Customer_Return_Rate",
+    "Courier_Return_Rate",
+    "Total_Return_Rate",
     "Cancellations",
     "Net_Settlement",
     "Marketplace_Fees",
@@ -325,7 +332,17 @@ def build_flipkart_sku_analysis() -> Dict[str, Any]:
         orders_count = unique_count(order_rows, ["Order_Item_ID", "Order_ID"])
         units_sold = sum(parse_float(row.get("Quantity", "0")) for row in order_rows) if order_rows else 0.0
         gross_sales = derive_gross_sales(order_rows, settlement_rows)
-        returns_count = unique_count(return_rows, ["Order_Item_ID", "Return_ID", "Order_ID"])
+        customer_return_rows = [row for row in return_rows if normalize_text(row.get("Return_Bucket", "")) == "customer_return"]
+        courier_return_rows = [row for row in return_rows if normalize_text(row.get("Return_Bucket", "")) == "courier_return"]
+        unknown_return_rows = [row for row in return_rows if normalize_text(row.get("Return_Bucket", "")) == "unknown_return"]
+        customer_returns_count = unique_count(customer_return_rows, ["Order_Item_ID", "Return_ID", "Order_ID"])
+        courier_returns_count = unique_count(courier_return_rows, ["Order_Item_ID", "Return_ID", "Order_ID"])
+        unknown_returns_count = unique_count(unknown_return_rows, ["Order_Item_ID", "Return_ID", "Order_ID"])
+        total_returns_count = customer_returns_count + courier_returns_count + unknown_returns_count
+        returns_count = customer_returns_count
+        customer_return_rate = (customer_returns_count / orders_count) if orders_count else 0.0
+        courier_return_rate = (courier_returns_count / orders_count) if orders_count else 0.0
+        total_return_rate = (total_returns_count / orders_count) if orders_count else 0.0
         cancellations = len([row for row in order_rows if row.get("Cancellation_Status", "").lower() in {"cancelled", "canceled", "cancel", "cancelled by customer"}])
         raw_net_settlement = sum_field(settlement_rows, "Net_Settlement")
         net_settlement = derive_net_settlement(settlement_rows, gross_sales, raw_net_settlement)
@@ -393,6 +410,13 @@ def build_flipkart_sku_analysis() -> Dict[str, Any]:
             "Gross_Sales": format_decimal(gross_sales, 2),
             "Returns": str(returns_count),
             "Return_Rate": f"{(returns_count / orders_count):.4f}" if orders_count else "0",
+            "Customer_Return_Count": str(customer_returns_count),
+            "Courier_Return_Count": str(courier_returns_count),
+            "Unknown_Return_Count": str(unknown_returns_count),
+            "Total_Return_Count": str(total_returns_count),
+            "Customer_Return_Rate": f"{customer_return_rate:.4f}" if orders_count else "0",
+            "Courier_Return_Rate": f"{courier_return_rate:.4f}" if orders_count else "0",
+            "Total_Return_Rate": f"{total_return_rate:.4f}" if orders_count else "0",
             "Cancellations": str(cancellations),
             "Net_Settlement": format_decimal(net_settlement, 2),
             "Marketplace_Fees": format_decimal(marketplace_fees, 2),
@@ -464,7 +488,8 @@ def build_flipkart_sku_analysis() -> Dict[str, Any]:
         "medium_confidence_count": sum(1 for row in rows if normalize_text(row.get("Data_Confidence", "")).upper() == "MEDIUM"),
         "low_confidence_count": sum(1 for row in rows if normalize_text(row.get("Data_Confidence", "")).upper() == "LOW"),
         "negative_profit_count": sum(1 for row in rows if parse_float(row.get("Net_Profit_Before_COGS", "")) < 0),
-        "high_return_rate_count": sum(1 for row in rows if parse_float(row.get("Return_Rate", "")) > 0.20),
+        "high_return_rate_count": sum(1 for row in rows if parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", ""))) > 0.20),
+        "high_customer_return_rate_count": sum(1 for row in rows if parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", ""))) > 0.20),
         "missing_settlement_count": sum(1 for row in rows if "Settlement Missing" in normalize_text(row.get("Missing_Data", ""))),
         "missing_pnl_count": sum(1 for row in rows if "PNL Missing" in normalize_text(row.get("Missing_Data", ""))),
     }

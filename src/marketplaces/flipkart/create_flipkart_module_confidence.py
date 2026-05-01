@@ -402,8 +402,8 @@ def return_confidence(
     return_comment_rows: Sequence[Dict[str, Any]],
 ) -> Tuple[float, str, str]:
     orders = first_numeric(analysis_row, "Orders")
-    returns = first_numeric(analysis_row, "Returns")
-    return_rate = first_numeric(analysis_row, "Return_Rate")
+    returns = first_numeric(analysis_row, "Customer_Return_Count") or first_numeric(analysis_row, "Returns")
+    return_rate = first_numeric(analysis_row, "Customer_Return_Rate") or first_numeric(analysis_row, "Return_Rate")
     summary_count = len(return_summary_rows)
     comment_count = len(return_comment_rows)
     mapped_rows = summary_count + comment_count
@@ -412,7 +412,7 @@ def return_confidence(
         reason = f"Return issue summary rows={summary_count} and mapped comments={comment_count}."
     elif (returns > 0 or return_rate > 0) and orders > 0:
         score = 40.0
-        reason = f"Returns expected but not mapped (Returns={format_count(returns)}, Return_Rate={return_rate:.2f})."
+        reason = f"Customer returns expected but not mapped (Customer_Return_Count={format_count(returns)}, Customer_Return_Rate={return_rate:.2f})."
     elif orders > 0:
         score = 80.0
         reason = f"No returns mapped yet and orders exist (Orders={format_count(orders)})."

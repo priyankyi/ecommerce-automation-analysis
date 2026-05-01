@@ -419,10 +419,10 @@ def build_current_snapshot(
     snapshot["Missing Active Listings"] = str(sum(1 for row in analysis_unique_rows if row_missing_listing(row)))
     snapshot["Ads Ready Count"] = str(sum(1 for row in analysis_unique_rows if is_ads_ready(row)))
     snapshot["FSNs With Orders"] = str(sum(1 for row in analysis_unique_rows if parse_float(row.get("Orders", "")) > 0))
-    snapshot["FSNs With Returns"] = str(sum(1 for row in analysis_unique_rows if parse_float(row.get("Returns", "")) > 0))
+    snapshot["FSNs With Returns"] = str(sum(1 for row in analysis_unique_rows if parse_float(row.get("Customer_Return_Count", row.get("Returns", ""))) > 0))
     snapshot["FSNs With Settlement"] = str(sum(1 for row in analysis_unique_rows if not row_missing_settlement(row)))
     snapshot["FSNs With PNL"] = str(sum(1 for row in analysis_unique_rows if not row_missing_pnl(row)))
-    snapshot["High Return Rate Count"] = str(sum(1 for row in analysis_unique_rows if parse_float(row.get("Return_Rate", "")) > 0.20))
+    snapshot["High Return Rate Count"] = str(sum(1 for row in analysis_unique_rows if parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", ""))) > 0.20))
     snapshot["Missing Settlement Count"] = str(sum(1 for row in analysis_unique_rows if row_missing_settlement(row)))
     snapshot["Missing PNL Count"] = str(sum(1 for row in analysis_unique_rows if row_missing_pnl(row)))
     snapshot["Total Final Net Profit"] = format_number(
@@ -458,10 +458,10 @@ def build_previous_snapshot(
     snapshot["Missing Active Listings"] = str(sum(1 for row in previous_unique_rows if row_missing_listing(row)))
     snapshot["Ads Ready Count"] = ""
     snapshot["FSNs With Orders"] = str(sum(1 for row in previous_unique_rows if parse_float(row.get("Orders", "")) > 0))
-    snapshot["FSNs With Returns"] = str(sum(1 for row in previous_unique_rows if parse_float(row.get("Returns", "")) > 0))
+    snapshot["FSNs With Returns"] = str(sum(1 for row in previous_unique_rows if parse_float(row.get("Customer_Return_Count", row.get("Returns", ""))) > 0))
     snapshot["FSNs With Settlement"] = str(sum(1 for row in previous_unique_rows if not row_missing_settlement(row)))
     snapshot["FSNs With PNL"] = str(sum(1 for row in previous_unique_rows if not row_missing_pnl(row)))
-    snapshot["High Return Rate Count"] = str(sum(1 for row in previous_unique_rows if parse_float(row.get("Return_Rate", "")) > 0.20))
+    snapshot["High Return Rate Count"] = str(sum(1 for row in previous_unique_rows if parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", ""))) > 0.20))
     snapshot["Missing Settlement Count"] = str(sum(1 for row in previous_unique_rows if row_missing_settlement(row)))
     snapshot["Missing PNL Count"] = str(sum(1 for row in previous_unique_rows if row_missing_pnl(row)))
     snapshot["Total Final Net Profit"] = ""

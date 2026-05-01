@@ -68,6 +68,13 @@ FSN_HISTORY_HEADERS = [
     "Gross_Sales",
     "Returns",
     "Return_Rate",
+    "Customer_Return_Count",
+    "Courier_Return_Count",
+    "Unknown_Return_Count",
+    "Total_Return_Count",
+    "Customer_Return_Rate",
+    "Courier_Return_Rate",
+    "Total_Return_Rate",
     "Net_Settlement",
     "Flipkart_Net_Earnings",
     "Net_Profit_Before_COGS",
@@ -248,7 +255,7 @@ def count_present_fsns(rows: Sequence[Dict[str, str]], marker: str) -> int:
 
 
 def count_high_return_rate(rows: Sequence[Dict[str, str]]) -> int:
-    return sum(1 for row in rows if parse_float(row.get("Return_Rate", "")) > 0.20)
+    return sum(1 for row in rows if parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", ""))) > 0.20)
 
 
 def build_run_history_row(summary: Dict[str, Any], analysis_rows: Sequence[Dict[str, str]]) -> Dict[str, Any]:
@@ -300,6 +307,13 @@ def build_fsn_history_rows(summary: Dict[str, Any], analysis_rows: Sequence[Dict
                 "Gross_Sales": row.get("Gross_Sales", ""),
                 "Returns": row.get("Returns", ""),
                 "Return_Rate": row.get("Return_Rate", ""),
+                "Customer_Return_Count": row.get("Customer_Return_Count", ""),
+                "Courier_Return_Count": row.get("Courier_Return_Count", ""),
+                "Unknown_Return_Count": row.get("Unknown_Return_Count", ""),
+                "Total_Return_Count": row.get("Total_Return_Count", ""),
+                "Customer_Return_Rate": row.get("Customer_Return_Rate", ""),
+                "Courier_Return_Rate": row.get("Courier_Return_Rate", ""),
+                "Total_Return_Rate": row.get("Total_Return_Rate", ""),
                 "Net_Settlement": row.get("Net_Settlement", ""),
                 "Flipkart_Net_Earnings": row.get("Flipkart_Net_Earnings", ""),
                 "Net_Profit_Before_COGS": row.get("Net_Profit_Before_COGS", ""),

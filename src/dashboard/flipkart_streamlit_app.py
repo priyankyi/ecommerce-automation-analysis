@@ -1116,10 +1116,21 @@ def render_returns_intelligence(frames: Dict[str, pd.DataFrame], search_filters:
         customer_detail_df = all_details_df[all_details_df[bucket_col].fillna("").astype(str).map(normalize_text) == "customer_return"].copy()
     if courier_detail_df.empty and not all_details_df.empty and bucket_col:
         courier_detail_df = all_details_df[all_details_df[bucket_col].fillna("").astype(str).map(normalize_text) == "courier_return"].copy()
+    return_type_focus = st.selectbox(
+        "Return Type",
+        ["All", "customer_return", "courier_return", "unknown_return"],
+        index=0,
+        key="returns_intelligence_return_type_focus",
+    )
     all_details_filtered = apply_global_search(all_details_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Return_Reason", "Return_Sub_Reason", "Comments", "Order_ID", "Order_Item_ID", "Return_ID"])
     customer_filtered = apply_global_search(customer_summary_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Top_Customer_Return_Reason", "Top_Customer_Return_Sub_Reason", "Suggested_Action"])
     courier_filtered = apply_global_search(courier_summary_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Top_Courier_Return_Reason", "Top_Courier_Return_Sub_Reason", "Suggested_Action"])
     pivot_filtered = apply_global_search(pivot_df, search_filters, ["FSN", "SKU_ID", "Product_Title", "Customer_vs_Courier_Mix", "Dominant_Return_Type"])
+    if return_type_focus != "All" and bucket_col:
+        all_details_filtered = all_details_filtered[all_details_filtered[bucket_col].fillna("").astype(str).map(normalize_text) == return_type_focus].copy()
+        pivot_bucket_col = resolve_column(pivot_filtered, ["Dominant_Return_Type"])
+        if pivot_bucket_col:
+            pivot_filtered = pivot_filtered[pivot_filtered[pivot_bucket_col].fillna("").astype(str).map(normalize_text) == return_type_focus].copy()
     render_page_header(
         "Returns Intelligence",
         "Customer returns drive product-quality and ads risk. Courier returns stay separate as logistics intelligence.",
@@ -1977,6 +1988,12 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
     title = normalize_text(summary_row.get("Product_Title", "")) or normalize_text(selected_row.get("Product_Title", "")) or "-"
     sku = normalize_text(summary_row.get("SKU_ID", "")) or normalize_text(selected_row.get("SKU_ID", "")) or "-"
     category = normalize_text(summary_row.get("Category", "")) or "-"
+    customer_return_count = normalize_text(summary_row.get("Customer_Return_Count", "")) or normalize_text(summary_row.get("Returns", "")) or "0"
+    customer_return_rate = normalize_text(summary_row.get("Customer_Return_Rate", "")) or normalize_text(summary_row.get("Return_Rate", "")) or "0"
+    courier_return_count = normalize_text(summary_row.get("Courier_Return_Count", "")) or "0"
+    courier_return_rate = normalize_text(summary_row.get("Courier_Return_Rate", "")) or "0"
+    total_return_count = normalize_text(summary_row.get("Total_Return_Count", "")) or normalize_text(summary_row.get("Returns", "")) or "0"
+    total_return_rate = normalize_text(summary_row.get("Total_Return_Rate", "")) or normalize_text(summary_row.get("Return_Rate", "")) or "0"
     render_metric_cards(
         [
             {"label": "FSN", "value": selected_fsn, "note": title},
@@ -1985,8 +2002,9 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
             {"label": "Actions", "value": f"{len(actions_df):,}", "note": "Matching action rows"},
             {"label": "Profit Rows", "value": f"{len(profit_df):,}", "note": "Adjustment-aware profit"},
             {"label": "Order Item Master Rows", "value": f"{len(order_item_master_df):,}", "note": "Master rows for this FSN"},
-            {"label": "Customer Returns", "value": f"{len(customer_returns_df):,}", "note": "Product-quality rows"},
-            {"label": "Courier Returns", "value": f"{len(courier_returns_df):,}", "note": "Logistics rows"},
+            {"label": "Customer Return Count", "value": customer_return_count, "note": f"Rate {customer_return_rate}"},
+            {"label": "Courier Return Count", "value": courier_return_count, "note": f"Rate {courier_return_rate}"},
+            {"label": "Total Return Count", "value": total_return_count, "note": f"Rate {total_return_rate}"},
             {"label": "Listings", "value": f"{len(listings_df):,}", "note": "Listing presence rows"},
             {"label": "Competitor Risk", "value": format_text_or_dash(latest_non_blank_value(competitor_df, ["Competition_Risk_Level"])), "note": "Comparable competitor view"},
         ],
@@ -1995,7 +2013,7 @@ def render_fsn_drilldown(frames: Dict[str, pd.DataFrame], search_filters: Dict[s
 
     core_summary_rows: List[Dict[str, Any]] = []
     for source_name, df, preferred_columns in [
-        ("FSN Metrics", fsn_metrics_df, ["FSN", "SKU_ID", "Product_Title", "Category", "Listing_Presence_Status", "Orders", "Units_Sold", "Gross_Sales", "Returns", "Return_Rate", "Net_Settlement", "Final_Net_Profit", "Final_Profit_Margin", "COGS_Status", "Final_Action", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"]),
+        ("FSN Metrics", fsn_metrics_df, ["FSN", "SKU_ID", "Product_Title", "Category", "Listing_Presence_Status", "Orders", "Units_Sold", "Gross_Sales", "Customer_Return_Count", "Customer_Return_Rate", "Courier_Return_Count", "Courier_Return_Rate", "Total_Return_Count", "Total_Return_Rate", "Returns", "Return_Rate", "Net_Settlement", "Final_Net_Profit", "Final_Profit_Margin", "COGS_Status", "Final_Action", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"]),
         ("Adjusted Profit", profit_df, ["FSN", "SKU_ID", "Product_Title", "Original_Final_Net_Profit", "Total_Adjustment_Additions", "Total_Adjustment_Deductions", "Net_Adjustment", "Adjusted_Final_Net_Profit", "Adjustment_Count", "Adjustment_Status", "Last_Updated"]),
         ("Ads", ads_df, ["FSN", "SKU_ID", "Product_Title", "Final_Product_Type", "Final_Seasonality_Tag", "Ad_Run_Type", "Current_Ad_Status", "Ad_ROAS", "Ad_ACOS", "Final_Ads_Decision", "Final_Budget_Recommendation", "Ads_Risk_Level", "Ads_Opportunity_Level", "Last_Updated"]),
         ("Customer Returns", customer_summary_df, ["FSN", "SKU_ID", "Product_Title", "Sold_Order_Items", "Customer_Return_Count", "Customer_Return_Rate", "Quality_Issue_Count", "Defective_Product_Count", "Damaged_Product_Count", "Missing_Item_Count", "Wrong_Product_Count", "Customer_Remorse_Count", "Top_Customer_Return_Reason", "Top_Customer_Return_Sub_Reason", "Customer_Return_Risk_Level", "Suggested_Action", "Data_Gap_Reason", "Last_Updated"]),

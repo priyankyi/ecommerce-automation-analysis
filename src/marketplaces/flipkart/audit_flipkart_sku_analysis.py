@@ -61,6 +61,13 @@ AUDIT_HEADERS = [
     "Gross_Sales",
     "Returns",
     "Return_Rate",
+    "Customer_Return_Count",
+    "Courier_Return_Count",
+    "Unknown_Return_Count",
+    "Total_Return_Count",
+    "Customer_Return_Rate",
+    "Courier_Return_Rate",
+    "Total_Return_Rate",
     "Net_Settlement",
     "Marketplace_Fees",
     "Flipkart_Net_Earnings",
@@ -98,6 +105,13 @@ NUMERIC_COLUMNS = [
     "Gross_Sales",
     "Returns",
     "Return_Rate",
+    "Customer_Return_Count",
+    "Courier_Return_Count",
+    "Unknown_Return_Count",
+    "Total_Return_Count",
+    "Customer_Return_Rate",
+    "Courier_Return_Rate",
+    "Total_Return_Rate",
     "Net_Settlement",
     "Marketplace_Fees",
     "Flipkart_Net_Earnings",
@@ -260,8 +274,8 @@ def audit_flipkart_sku_analysis() -> Dict[str, Any]:
         current_orders = parse_float(row.get("Orders", ""))
         current_units_sold = parse_float(row.get("Units_Sold", ""))
         current_gross_sales = parse_float(row.get("Gross_Sales", ""))
-        current_returns = parse_float(row.get("Returns", ""))
-        current_return_rate = parse_float(row.get("Return_Rate", ""))
+        current_returns = parse_float(row.get("Customer_Return_Count", row.get("Returns", "")))
+        current_return_rate = parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", "")))
         current_net_settlement = parse_float(row.get("Net_Settlement", ""))
         current_marketplace_fees = parse_float(row.get("Marketplace_Fees", ""))
         current_flipkart_net_earnings = parse_float(row.get("Flipkart_Net_Earnings", ""))
@@ -321,6 +335,13 @@ def audit_flipkart_sku_analysis() -> Dict[str, Any]:
             "Gross_Sales": row.get("Gross_Sales", ""),
             "Returns": row.get("Returns", ""),
             "Return_Rate": row.get("Return_Rate", ""),
+            "Customer_Return_Count": row.get("Customer_Return_Count", ""),
+            "Courier_Return_Count": row.get("Courier_Return_Count", ""),
+            "Unknown_Return_Count": row.get("Unknown_Return_Count", ""),
+            "Total_Return_Count": row.get("Total_Return_Count", ""),
+            "Customer_Return_Rate": row.get("Customer_Return_Rate", ""),
+            "Courier_Return_Rate": row.get("Courier_Return_Rate", ""),
+            "Total_Return_Rate": row.get("Total_Return_Rate", ""),
             "Net_Settlement": row.get("Net_Settlement", ""),
             "Marketplace_Fees": row.get("Marketplace_Fees", ""),
             "Flipkart_Net_Earnings": row.get("Flipkart_Net_Earnings", ""),

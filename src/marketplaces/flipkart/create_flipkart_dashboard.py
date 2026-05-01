@@ -112,12 +112,12 @@ SEVERITY_ORDER = {
 
 TOP_ALERT_TYPE_PRIORITY = {
     "Negative Final Profit": 0,
-    "Critical Return Rate": 1,
+    "Critical Customer Return Rate": 1,
     "Negative Profit Before COGS": 2,
     "Listing Not Active": 3,
     "Low Confidence With Sales": 4,
     "Low Final Profit Margin": 0,
-    "High Return Rate": 1,
+    "High Customer Return Rate": 1,
     "Settlement Missing": 2,
     "PNL Missing": 3,
     "Listing Missing": 4,
@@ -395,7 +395,7 @@ def latest_row_by_run_id(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def count_return_rate(rows: Sequence[Dict[str, Any]], threshold: float = 0.20) -> int:
-    return sum(1 for row in rows if parse_float(row.get("Return_Rate", "")) > threshold)
+    return sum(1 for row in rows if parse_float(row.get("Customer_Return_Rate", row.get("Return_Rate", ""))) > threshold)
 
 
 def count_by_status(rows: Sequence[Dict[str, Any]], status_field: str = "Status") -> Counter:
@@ -564,7 +564,7 @@ def build_dashboard_rows(
         (
             SECTION_TITLES[4],
             [
-                ("High Return Rate Count", count_return_rate(data_source_rows), "Business Risk Summary"),
+                ("High Customer Return Rate Count", count_return_rate(data_source_rows), "Business Risk Summary"),
                 ("Missing Settlement Count", sum(1 for row in data_source_rows if "Settlement Missing" in normalize_text(row.get("Missing_Data", ""))), "Business Risk Summary"),
                 ("Missing PNL Count", sum(1 for row in data_source_rows if "PNL Missing" in normalize_text(row.get("Missing_Data", ""))), "Business Risk Summary"),
                 ("Final Negative Profit FSNs", final_negative_profit_count, "Business Risk Summary"),

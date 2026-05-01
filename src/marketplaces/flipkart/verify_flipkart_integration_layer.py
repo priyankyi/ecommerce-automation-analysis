@@ -17,10 +17,12 @@ from src.marketplaces.flipkart.create_looker_studio_sources import (
     LOOKER_ADJUSTED_PROFIT_TAB,
     LOOKER_COMPETITOR_INTELLIGENCE_TAB,
     LOOKER_DEMAND_PROFILE_TAB,
+    LOOKER_FSN_METRICS_TAB,
     LOOKER_MODULE_CONFIDENCE_TAB,
     LOOKER_ORDER_ITEM_EXPLORER_TAB,
     LOOKER_ORDER_ITEM_MASTER_TAB,
     LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB,
+    LOOKER_RETURNS_TAB,
     LOOKER_REPORT_FORMAT_MONITOR_TAB,
     LOOKER_RUN_COMPARISON_TAB,
     LOOKER_RUN_QUALITY_TAB,
@@ -68,9 +70,11 @@ LOOKER_TABS_FOR_INTEGRATION = [
     LOOKER_ADJUSTED_PROFIT_TAB,
     LOOKER_REPORT_FORMAT_MONITOR_TAB,
     LOOKER_RUN_QUALITY_TAB,
+    LOOKER_FSN_METRICS_TAB,
     LOOKER_MODULE_CONFIDENCE_TAB,
     LOOKER_DEMAND_PROFILE_TAB,
     LOOKER_COMPETITOR_INTELLIGENCE_TAB,
+    LOOKER_RETURNS_TAB,
     LOOKER_ORDER_ITEM_EXPLORER_TAB,
     LOOKER_ORDER_ITEM_MASTER_TAB,
     LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB,
@@ -219,6 +223,8 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
     competitor_queue_rows = table("FLIPKART_COMPETITOR_SEARCH_QUEUE")
     visual_results_rows = table("FLIPKART_VISUAL_COMPETITOR_RESULTS")
     keyword_cache_rows = table("GOOGLE_KEYWORD_METRICS_CACHE")
+    looker_fsn_metrics_rows = table(LOOKER_FSN_METRICS_TAB)
+    looker_returns_rows = table(LOOKER_RETURNS_TAB)
 
     sku_fsns = {clean_fsn(row.get("FSN", "")) for row in sku_analysis_rows if clean_fsn(row.get("FSN", ""))}
     module_confidence_fsns = {clean_fsn(row.get("FSN", "")) for row in module_confidence_rows if clean_fsn(row.get("FSN", ""))}
@@ -290,6 +296,8 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         LOOKER_ADJUSTED_PROFIT_TAB: count_rows(table(LOOKER_ADJUSTED_PROFIT_TAB)),
         LOOKER_REPORT_FORMAT_MONITOR_TAB: count_rows(table(LOOKER_REPORT_FORMAT_MONITOR_TAB)),
         LOOKER_RUN_QUALITY_TAB: count_rows(table(LOOKER_RUN_QUALITY_TAB)),
+        LOOKER_FSN_METRICS_TAB: count_rows(looker_fsn_metrics_rows),
+        LOOKER_RETURNS_TAB: count_rows(looker_returns_rows),
         LOOKER_MODULE_CONFIDENCE_TAB: count_rows(table(LOOKER_MODULE_CONFIDENCE_TAB)),
         LOOKER_DEMAND_PROFILE_TAB: count_rows(table(LOOKER_DEMAND_PROFILE_TAB)),
         LOOKER_COMPETITOR_INTELLIGENCE_TAB: count_rows(table(LOOKER_COMPETITOR_INTELLIGENCE_TAB)),
@@ -307,6 +315,28 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
     adjusted_profit_has_rows = row_counts["FLIPKART_ADJUSTED_PROFIT"] > 0 and row_counts[LOOKER_ADJUSTED_PROFIT_TAB] > 0
     report_format_monitor_has_rows = row_counts["FLIPKART_REPORT_FORMAT_MONITOR"] > 0 and row_counts[LOOKER_REPORT_FORMAT_MONITOR_TAB] > 0
     demand_profile_has_rows = row_counts["PRODUCT_TYPE_DEMAND_PROFILE"] > 0 and row_counts[LOOKER_DEMAND_PROFILE_TAB] > 0
+    looker_fsn_metrics_has_return_fields = bool(looker_fsn_metrics_rows) and all(
+        field in looker_fsn_metrics_rows[0]
+        for field in [
+            "Customer_Return_Count",
+            "Customer_Return_Rate",
+            "Courier_Return_Count",
+            "Courier_Return_Rate",
+            "Total_Return_Count",
+            "Total_Return_Rate",
+        ]
+    )
+    looker_returns_has_return_fields = bool(looker_returns_rows) and all(
+        field in looker_returns_rows[0]
+        for field in [
+            "Customer_Return_Count",
+            "Courier_Return_Count",
+            "Unknown_Return_Count",
+            "Customer_Return_Rate",
+            "Courier_Return_Rate",
+            "Total_Return_Rate",
+        ]
+    )
     default_refresh_safe = runner_default_safe and not runner_summary.get("drive_archive_synced", False)
 
     checks = {
@@ -323,6 +353,8 @@ def verify_flipkart_integration_layer() -> Dict[str, Any]:
         "adjusted_profit_has_rows": adjusted_profit_has_rows,
         "report_format_monitor_has_rows": report_format_monitor_has_rows,
         "demand_profile_has_rows": demand_profile_has_rows,
+        "looker_fsn_metrics_has_return_fields": looker_fsn_metrics_has_return_fields,
+        "looker_returns_has_return_fields": looker_returns_has_return_fields,
         "order_item_explorer_has_rows": row_counts["FLIPKART_ORDER_ITEM_EXPLORER"] > 0 and row_counts[LOOKER_ORDER_ITEM_EXPLORER_TAB] > 0,
         "order_item_master_has_rows": row_counts["FLIPKART_ORDER_ITEM_MASTER"] > 0 and row_counts[LOOKER_ORDER_ITEM_MASTER_TAB] > 0,
         "order_item_source_detail_has_rows": row_counts["FLIPKART_ORDER_ITEM_SOURCE_DETAIL"] > 0 and row_counts[LOOKER_ORDER_ITEM_SOURCE_DETAIL_TAB] > 0,
